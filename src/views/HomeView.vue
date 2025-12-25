@@ -1,32 +1,94 @@
 <script setup>
-import { ref, computed, watch, onMounted } from 'vue'
-import { useRouter } from 'vue-router'
-import { useAuthStore } from '@/stores/auth'
+import { ref, computed, watch, onMounted, onBeforeUnmount } from 'vue'
+import { onBeforeRouteLeave } from 'vue-router'
 import { useProfilesStore } from '@/stores/profiles'
 import { useEntriesStore } from '@/stores/entries'
 import { Button } from '@/components/ui/button'
 import { Textarea } from '@/components/ui/textarea'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import ProfileSwitcher from '@/components/ProfileSwitcher.vue'
+import AppHeader from '@/components/AppHeader.vue'
 import ThingInput from '@/components/ThingInput.vue'
-import { Plus, Calendar, Settings, LogOut, Users } from 'lucide-vue-next'
+import { Plus, ChevronLeft, ChevronRight } from 'lucide-vue-next'
 
-const router = useRouter()
-const auth = useAuthStore()
 const profiles = useProfilesStore()
 const entries = useEntriesStore()
+
+// Track pending changes for save on navigation
+const pendingThingIndex = ref(null)
+const pendingBonusNotes = ref(false)
+
+const currentDate = ref(new Date())
+const initialLoading = ref(true)
 
 const bonusNotes = ref('')
 const thingValues = ref(['', '', ''])
 
-const today = computed(() => {
-  return new Date().toLocaleDateString('en-US', {
+const currentDateStr = computed(() => {
+  const year = currentDate.value.getFullYear()
+  const month = String(currentDate.value.getMonth() + 1).padStart(2, '0')
+  const day = String(currentDate.value.getDate()).padStart(2, '0')
+  return `${year}-${month}-${day}`
+})
+
+const displayDate = computed(() => {
+  return currentDate.value.toLocaleDateString('en-US', {
     weekday: 'long',
-    year: 'numeric',
     month: 'long',
-    day: 'numeric'
+    day: 'numeric',
+    year: 'numeric'
   })
 })
+
+const isToday = computed(() => {
+  const today = new Date()
+  today.setHours(0, 0, 0, 0)
+
+  const current = new Date(currentDate.value)
+  current.setHours(0, 0, 0, 0)
+
+  return today.getTime() === current.getTime()
+})
+
+const friendlyName = computed(() => {
+  const today = new Date()
+  today.setHours(0, 0, 0, 0)
+
+  const current = new Date(currentDate.value)
+  current.setHours(0, 0, 0, 0)
+
+  const diffTime = today.getTime() - current.getTime()
+  const diffDays = Math.round(diffTime / (1000 * 60 * 60 * 24))
+
+  if (diffDays === 0) return 'Today'
+  if (diffDays === 1) return 'Yesterday'
+  if (diffDays === 7) return '1 Week Ago'
+  if (diffDays === 14) return '2 Weeks Ago'
+  if (diffDays === 30 || diffDays === 31) return '1 Month Ago'
+  if (diffDays > 1 && diffDays <= 6) return `${diffDays} Days Ago`
+
+  return '' // No friendly name for other dates
+})
+
+function handleDateSelect(dateStr) {
+  const [year, month, day] = dateStr.split('-').map(Number)
+  currentDate.value = new Date(year, month - 1, day)
+}
+
+function prevDay() {
+  const newDate = new Date(currentDate.value)
+  newDate.setDate(newDate.getDate() - 1)
+  currentDate.value = newDate
+}
+
+function nextDay() {
+  const newDate = new Date(currentDate.value)
+  newDate.setDate(newDate.getDate() + 1)
+  currentDate.value = newDate
+}
+
+function goToToday() {
+  currentDate.value = new Date()
+}
 
 const isManaged = computed(() => {
   return profiles.activeProfile?.is_managed ?? false
@@ -35,18 +97,23 @@ const isManaged = computed(() => {
 // Initialize on mount
 onMounted(async () => {
   await profiles.fetchProfiles()
-  await loadTodayEntry()
+  await loadEntry()
+  initialLoading.value = false
 })
 
-// Watch for profile changes
+// Watch for profile or date changes
 watch(() => profiles.activeProfileId, async () => {
-  await loadTodayEntry()
+  await loadEntry()
 })
 
-async function loadTodayEntry() {
+watch(currentDate, async () => {
+  await loadEntry()
+})
+
+async function loadEntry() {
   if (!profiles.activeProfile) return
 
-  await entries.getOrCreateEntry(profiles.activeProfile.id)
+  await entries.loadEntryForDate(profiles.activeProfile.id, currentDate.value)
 
   // Populate local values from loaded things
   const newValues = ['', '', '']
@@ -67,7 +134,12 @@ async function loadTodayEntry() {
   bonusNotes.value = entries.currentEntry?.bonus_notes || ''
 }
 
+function handleThingFocus(index) {
+  pendingThingIndex.value = index
+}
+
 async function handleThingBlur(index, value) {
+  pendingThingIndex.value = null
   await entries.saveThing(index, value)
 }
 
@@ -81,39 +153,46 @@ async function removeThing(index) {
   await entries.removeThing(index)
 }
 
+function handleBonusNotesFocus() {
+  pendingBonusNotes.value = true
+}
+
 async function handleBonusNotesBlur() {
+  pendingBonusNotes.value = false
   await entries.saveBonusNotes(bonusNotes.value)
 }
 
-function logout() {
-  auth.logout()
-  entries.clear()
-  router.push('/login')
+async function saveAllPending() {
+  // Save any pending thing
+  if (pendingThingIndex.value !== null) {
+    await entries.saveThing(pendingThingIndex.value, thingValues.value[pendingThingIndex.value])
+    pendingThingIndex.value = null
+  }
+  // Save pending bonus notes
+  if (pendingBonusNotes.value) {
+    await entries.saveBonusNotes(bonusNotes.value)
+    pendingBonusNotes.value = false
+  }
 }
+
+// Save pending changes when leaving the route
+onBeforeRouteLeave(async () => {
+  await saveAllPending()
+})
+
+// Save pending changes on unmount
+onBeforeUnmount(async () => {
+  await saveAllPending()
+})
 </script>
 
 <template>
   <div class="min-h-screen bg-background">
     <!-- Header -->
-    <header class="border-b">
-      <div class="container mx-auto px-4 py-3 flex items-center justify-between">
-        <ProfileSwitcher />
-        <div class="flex items-center gap-1">
-          <Button variant="ghost" size="icon" @click="router.push('/history')">
-            <Calendar class="h-5 w-5" />
-          </Button>
-          <Button variant="ghost" size="icon" @click="router.push('/profiles')">
-            <Users class="h-5 w-5" />
-          </Button>
-          <Button variant="ghost" size="icon" @click="router.push('/settings')">
-            <Settings class="h-5 w-5" />
-          </Button>
-          <Button variant="ghost" size="icon" @click="logout">
-            <LogOut class="h-5 w-5" />
-          </Button>
-        </div>
-      </div>
-    </header>
+    <AppHeader
+      :current-date-str="currentDateStr"
+      @date-select="handleDateSelect"
+    />
 
     <!-- Managed profile banner -->
     <div v-if="isManaged" class="bg-primary/10 border-b border-primary/20">
@@ -124,13 +203,22 @@ function logout() {
 
     <!-- Main content -->
     <main class="container mx-auto px-4 py-6 max-w-lg">
-      <div class="text-center mb-6">
-        <h1 class="text-2xl font-bold mb-1">My Three Things</h1>
-        <p class="text-muted-foreground">{{ today }}</p>
+      <!-- Date navigation -->
+      <div class="flex items-center justify-center gap-2 mb-6">
+        <Button variant="ghost" size="icon" @click="prevDay">
+          <ChevronLeft class="h-5 w-5" />
+        </Button>
+        <div class="text-center flex-1">
+          <p class="text-sm text-primary font-medium h-5">{{ friendlyName }}</p>
+          <p class="text-lg font-semibold">{{ displayDate }}</p>
+        </div>
+        <Button variant="ghost" size="icon" @click="nextDay" :disabled="isToday" :class="{ 'opacity-30': isToday }">
+          <ChevronRight class="h-5 w-5" />
+        </Button>
       </div>
 
       <!-- Loading state -->
-      <div v-if="entries.loading" class="text-center py-8 text-muted-foreground">
+      <div v-if="initialLoading || entries.loading" class="text-center py-8 text-muted-foreground">
         Loading...
       </div>
 
@@ -148,6 +236,7 @@ function logout() {
               :index="index"
               :can-remove="thingValues.length > 3"
               :placeholder="`Thing #${index + 1}`"
+              @focus="handleThingFocus(index)"
               @blur="handleThingBlur(index, $event)"
               @remove="removeThing(index)"
             />
@@ -172,9 +261,11 @@ function logout() {
           <CardContent>
             <Textarea
               v-model="bonusNotes"
+              @focus="handleBonusNotesFocus"
               @blur="handleBonusNotesBlur"
               placeholder="Optional notes about your day..."
               rows="4"
+              spellcheck="true"
             />
           </CardContent>
         </Card>

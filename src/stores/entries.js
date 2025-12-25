@@ -9,39 +9,63 @@ export const useEntriesStore = defineStore('entries', () => {
   const saving = ref(false)
 
   function formatDate(date) {
-    return date.toISOString().split('T')[0]
+    // Use local date, not UTC, to match what users see in the UI
+    const year = date.getFullYear()
+    const month = String(date.getMonth() + 1).padStart(2, '0')
+    const day = String(date.getDate()).padStart(2, '0')
+    return `${year}-${month}-${day}`
   }
 
-  async function getOrCreateEntry(profileId, date = new Date()) {
+  // Current profile and date being viewed (needed for lazy entry creation)
+  const currentProfileId = ref(null)
+  const currentDateStr = ref(null)
+
+  async function loadEntryForDate(profileId, date = new Date()) {
     if (!profileId) return null
 
     loading.value = true
-    try {
-      const dateStr = formatDate(date)
+    currentProfileId.value = profileId
+    currentDateStr.value = formatDate(date)
 
-      // Try to find existing entry
+    try {
+      // Calculate next day for range query
+      const nextDay = new Date(date)
+      nextDay.setDate(nextDay.getDate() + 1)
+      const nextDateStr = formatDate(nextDay)
+
+      // Try to find existing entry using date range to avoid format mismatches
       const entries = await pb.collection('entries').getList(1, 1, {
-        filter: `profile = "${profileId}" && date = "${dateStr}"`
+        filter: `profile = "${profileId}" && date >= "${currentDateStr.value}" && date < "${nextDateStr}"`,
+        requestKey: null // Disable auto-cancellation
       })
 
       if (entries.items.length > 0) {
         currentEntry.value = entries.items[0]
+        await fetchThings()
       } else {
-        // Create new entry
-        currentEntry.value = await pb.collection('entries').create({
-          profile: profileId,
-          date: dateStr,
-          bonus_notes: ''
-        })
+        // No entry yet - that's fine, we'll create it when user adds content
+        currentEntry.value = null
+        things.value = []
       }
-
-      // Fetch things for this entry
-      await fetchThings()
 
       return currentEntry.value
     } finally {
       loading.value = false
     }
+  }
+
+  async function ensureEntry() {
+    // Create entry if it doesn't exist yet
+    if (currentEntry.value) return currentEntry.value
+    if (!currentProfileId.value || !currentDateStr.value) return null
+
+    currentEntry.value = await pb.collection('entries').create({
+      profile: currentProfileId.value,
+      date: currentDateStr.value,
+      bonus_notes: ''
+    })
+
+    return currentEntry.value
   }
 
   async function fetchThings() {
@@ -52,14 +76,16 @@ export const useEntriesStore = defineStore('entries', () => {
 
     const thingRecords = await pb.collection('things').getFullList({
       filter: `entry = "${currentEntry.value.id}"`,
-      sort: 'order'
+      sort: 'order',
+      requestKey: null // Disable auto-cancellation
     })
 
     things.value = thingRecords
   }
 
   async function saveThing(index, content) {
-    if (!currentEntry.value) return
+    // Only save if there's content to save
+    if (!content.trim() && !things.value[index]) return
 
     saving.value = true
     try {
@@ -80,6 +106,10 @@ export const useEntriesStore = defineStore('entries', () => {
           await reorderThings()
         }
       } else if (content.trim()) {
+        // Create entry first if needed
+        await ensureEntry()
+        if (!currentEntry.value) return
+
         // Create new thing
         const newThing = await pb.collection('things').create({
           entry: currentEntry.value.id,
@@ -94,20 +124,10 @@ export const useEntriesStore = defineStore('entries', () => {
   }
 
   async function addThing() {
-    if (!currentEntry.value) return
-
-    saving.value = true
-    try {
-      const newThing = await pb.collection('things').create({
-        entry: currentEntry.value.id,
-        content: '',
-        order: things.value.length + 1
-      })
-      things.value.push(newThing)
-      return newThing
-    } finally {
-      saving.value = false
-    }
+    // Don't create an empty record - just add a placeholder locally
+    // The actual record will be created when saveThing is called with content
+    // This avoids 400 errors from PocketBase's required content validation
+    return null
   }
 
   async function removeThing(index) {
@@ -135,10 +155,15 @@ export const useEntriesStore = defineStore('entries', () => {
   }
 
   async function saveBonusNotes(notes) {
-    if (!currentEntry.value) return
+    // Only save if there's content
+    if (!notes.trim() && !currentEntry.value) return
 
     saving.value = true
     try {
+      // Create entry first if needed
+      await ensureEntry()
+      if (!currentEntry.value) return
+
       currentEntry.value = await pb.collection('entries').update(currentEntry.value.id, {
         bonus_notes: notes
       })
@@ -153,24 +178,11 @@ export const useEntriesStore = defineStore('entries', () => {
 
     const entries = await pb.collection('entries').getFullList({
       filter: `profile = "${profileId}" && date >= "${formatDate(startDate)}" && date <= "${formatDate(endDate)}"`,
-      sort: '-date'
+      sort: '-date',
+      requestKey: null // Disable auto-cancellation
     })
 
     return entries
-  }
-
-  async function getEntry(profileId, dateStr) {
-    const entries = await pb.collection('entries').getList(1, 1, {
-      filter: `profile = "${profileId}" && date = "${dateStr}"`
-    })
-
-    if (entries.items.length > 0) {
-      currentEntry.value = entries.items[0]
-      await fetchThings()
-      return currentEntry.value
-    }
-
-    return null
   }
 
   function clear() {
@@ -183,9 +195,9 @@ export const useEntriesStore = defineStore('entries', () => {
     things,
     loading,
     saving,
-    getOrCreateEntry,
+    loadEntryForDate,
+    ensureEntry,
     getEntriesForMonth,
-    getEntry,
     fetchThings,
     saveThing,
     addThing,

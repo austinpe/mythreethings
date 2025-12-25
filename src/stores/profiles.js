@@ -27,12 +27,19 @@ export const useProfilesStore = defineStore('profiles', () => {
       // Get all profiles this user manages
       const managerRecords = await pb.collection('profile_managers').getFullList({
         filter: `user = "${pb.authStore.record.id}"`,
-        expand: 'profile'
+        expand: 'profile',
+        requestKey: null // Disable auto-cancellation
       })
 
       profiles.value = managerRecords
         .map(pm => pm.expand?.profile)
         .filter(Boolean)
+
+      // Ensure self profile exists
+      const hasSelf = profiles.value.some(p => !p.is_managed)
+      if (!hasSelf) {
+        await createSelfProfile()
+      }
 
       // Set active profile to saved one or default to self
       if (!activeProfileId.value || !profiles.value.find(p => p.id === activeProfileId.value)) {
@@ -44,6 +51,23 @@ export const useProfilesStore = defineStore('profiles', () => {
     } finally {
       loading.value = false
     }
+  }
+
+  async function createSelfProfile() {
+    if (!pb.authStore.isValid) return
+
+    const profile = await pb.collection('profiles').create({
+      name: pb.authStore.record.name || pb.authStore.record.email.split('@')[0],
+      is_managed: false,
+      created_by: pb.authStore.record.id
+    })
+
+    await pb.collection('profile_managers').create({
+      profile: profile.id,
+      user: pb.authStore.record.id
+    })
+
+    profiles.value.push(profile)
   }
 
   function setActiveProfile(profileId) {

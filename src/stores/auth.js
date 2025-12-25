@@ -42,7 +42,8 @@ export const useAuthStore = defineStore('auth', () => {
     // Check if user already has a self profile
     const existingProfiles = await pb.collection('profile_managers').getList(1, 1, {
       filter: `user = "${pb.authStore.record.id}"`,
-      expand: 'profile'
+      expand: 'profile',
+      requestKey: null // Disable auto-cancellation
     })
 
     // Find a self (non-managed) profile
@@ -65,10 +66,8 @@ export const useAuthStore = defineStore('auth', () => {
     }
   }
 
-  // Check auth on store init
-  if (pb.authStore.isValid) {
-    ensureSelfProfile()
-  }
+  // Note: Don't call ensureSelfProfile on init - let profiles store handle it
+  // to avoid auto-cancellation conflicts
 
   return {
     user,

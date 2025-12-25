@@ -1,6 +1,5 @@
 <script setup>
 import { ref, onMounted } from 'vue'
-import { useRouter } from 'vue-router'
 import { useProfilesStore } from '@/stores/profiles'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -8,9 +7,9 @@ import { Label } from '@/components/ui/label'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Separator } from '@/components/ui/separator'
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
-import { Home, Plus, UserPlus, LogOut, Users } from 'lucide-vue-next'
+import AppHeader from '@/components/AppHeader.vue'
+import { Plus, UserPlus, LogOut, Users } from 'lucide-vue-next'
 
-const router = useRouter()
 const profiles = useProfilesStore()
 
 const showCreateForm = ref(false)
@@ -106,15 +105,7 @@ onMounted(async () => {
 <template>
   <div class="min-h-screen bg-background">
     <!-- Header -->
-    <header class="border-b">
-      <div class="container mx-auto px-4 py-3 flex items-center justify-between">
-        <Button variant="ghost" size="icon" @click="router.push('/')">
-          <Home class="h-5 w-5" />
-        </Button>
-        <h1 class="font-semibold">Profiles</h1>
-        <div class="w-10" />
-      </div>
-    </header>
+    <AppHeader :show-calendar="false" />
 
     <!-- Main content -->
     <main class="container mx-auto px-4 py-6 max-w-lg space-y-6">
@@ -197,17 +188,24 @@ onMounted(async () => {
                 </div>
               </div>
               <div class="flex gap-1">
-                <Button variant="ghost" size="icon" @click="openInviteForm(profile.id)">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  class="flex flex-col items-center gap-0.5 h-auto py-1 px-2"
+                  @click="openInviteForm(profile.id)"
+                >
                   <UserPlus class="h-4 w-4" />
+                  <span class="text-[10px]">Invite</span>
                 </Button>
                 <Button
                   variant="ghost"
-                  size="icon"
-                  class="text-destructive"
+                  size="sm"
+                  class="flex flex-col items-center gap-0.5 h-auto py-1 px-2 text-destructive"
                   @click="leaveProfile(profile.id)"
                   :disabled="managers[profile.id]?.length <= 1"
                 >
                   <LogOut class="h-4 w-4" />
+                  <span class="text-[10px]">Leave</span>
                 </Button>
               </div>
             </div>

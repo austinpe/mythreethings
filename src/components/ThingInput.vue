@@ -23,7 +23,7 @@ const props = defineProps({
   }
 })
 
-const emit = defineEmits(['update:modelValue', 'blur', 'remove'])
+const emit = defineEmits(['update:modelValue', 'blur', 'focus', 'remove'])
 
 const localValue = ref(props.modelValue)
 
@@ -34,6 +34,10 @@ watch(() => props.modelValue, (newVal) => {
 function handleInput(val) {
   localValue.value = val
   emit('update:modelValue', val)
+}
+
+function handleFocus() {
+  emit('focus')
 }
 
 function handleBlur() {
@@ -49,8 +53,10 @@ function handleBlur() {
     <Input
       :model-value="localValue"
       @update:model-value="handleInput"
+      @focus="handleFocus"
       @blur="handleBlur"
       :placeholder="placeholder"
+      spellcheck="true"
       class="flex-1"
     />
     <Button

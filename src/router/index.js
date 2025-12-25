@@ -17,12 +17,6 @@ const router = createRouter({
       meta: { guestOnly: true }
     },
     {
-      path: '/history',
-      name: 'history',
-      component: () => import('../views/HistoryView.vue'),
-      meta: { requiresAuth: true }
-    },
-    {
       path: '/entry/:date',
       name: 'entry',
       component: () => import('../views/EntryView.vue'),
