@@ -16,6 +16,20 @@ function generateShareCode() {
   return segments.join('-')
 }
 
+// Generate a management code (e.g., "MGR-ABCD-1234")
+function generateManagementCode() {
+  const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'
+  let code = 'MGR-'
+  for (let i = 0; i < 4; i++) {
+    code += chars.charAt(Math.floor(Math.random() * chars.length))
+  }
+  code += '-'
+  for (let i = 0; i < 4; i++) {
+    code += chars.charAt(Math.floor(Math.random() * chars.length))
+  }
+  return code
+}
+
 export const useAuthStore = defineStore('auth', () => {
   const user = ref(pb.authStore.record)
   const token = ref(pb.authStore.token)
@@ -88,7 +102,8 @@ export const useAuthStore = defineStore('auth', () => {
         name: pb.authStore.record.name || pb.authStore.record.email.split('@')[0],
         is_managed: false,
         created_by: pb.authStore.record.id,
-        share_code: generateShareCode()
+        share_code: generateShareCode(),
+        management_code: generateManagementCode()
       })
 
       await pb.collection('profile_managers').create({

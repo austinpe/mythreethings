@@ -17,6 +17,20 @@ function generateShareCode() {
   return segments.join('-')
 }
 
+// Generate a management code (e.g., "MGR-ABCD-1234") - different format to distinguish
+function generateManagementCode() {
+  const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'
+  let code = 'MGR-'
+  for (let i = 0; i < 4; i++) {
+    code += chars.charAt(Math.floor(Math.random() * chars.length))
+  }
+  code += '-'
+  for (let i = 0; i < 4; i++) {
+    code += chars.charAt(Math.floor(Math.random() * chars.length))
+  }
+  return code
+}
+
 export const useProfilesStore = defineStore('profiles', () => {
   const profiles = ref([])
   const activeProfileId = ref(localStorage.getItem('activeProfileId') || null)
@@ -66,8 +80,8 @@ export const useProfilesStore = defineStore('profiles', () => {
         await createSelfProfile()
       }
 
-      // Ensure all profiles have share codes (lazy migration for existing profiles)
-      await ensureShareCodes()
+      // Ensure all profiles have share codes and management codes (lazy migration)
+      await ensureProfileCodes()
 
       // Set active profile to saved one or default to self
       if (!activeProfileId.value || !profiles.value.find(p => p.id === activeProfileId.value)) {
@@ -88,7 +102,8 @@ export const useProfilesStore = defineStore('profiles', () => {
       name: pb.authStore.record.name || pb.authStore.record.email.split('@')[0],
       is_managed: false,
       created_by: pb.authStore.record.id,
-      share_code: generateShareCode()
+      share_code: generateShareCode(),
+      management_code: generateManagementCode()
     })
 
     await pb.collection('profile_managers').create({
@@ -99,14 +114,21 @@ export const useProfilesStore = defineStore('profiles', () => {
     profiles.value.push(profile)
   }
 
-  async function ensureShareCodes() {
-    // Generate share codes for any profiles missing them
+  async function ensureProfileCodes() {
+    // Generate share codes and management codes for any profiles missing them
     for (let i = 0; i < profiles.value.length; i++) {
       const profile = profiles.value[i]
+      const updates = {}
+
       if (!profile.share_code) {
-        const updated = await pb.collection('profiles').update(profile.id, {
-          share_code: generateShareCode()
-        })
+        updates.share_code = generateShareCode()
+      }
+      if (!profile.management_code) {
+        updates.management_code = generateManagementCode()
+      }
+
+      if (Object.keys(updates).length > 0) {
+        const updated = await pb.collection('profiles').update(profile.id, updates)
         profiles.value[i] = updated
       }
     }
@@ -124,7 +146,8 @@ export const useProfilesStore = defineStore('profiles', () => {
       name,
       is_managed: true,
       created_by: pb.authStore.record.id,
-      share_code: generateShareCode()
+      share_code: generateShareCode(),
+      management_code: generateManagementCode()
     })
 
     await pb.collection('profile_managers').create({
@@ -203,6 +226,41 @@ export const useProfilesStore = defineStore('profiles', () => {
     return user
   }
 
+  async function joinByManagementCode(managementCode) {
+    if (!pb.authStore.isValid) return null
+
+    // Find profile with this management code
+    const profileResults = await pb.collection('profiles').getList(1, 1, {
+      filter: `management_code = "${managementCode.trim().toUpperCase()}"`
+    })
+
+    if (profileResults.items.length === 0) {
+      throw new Error('No profile found with that management code')
+    }
+
+    const profile = profileResults.items[0]
+
+    // Check if already a manager
+    const existing = await pb.collection('profile_managers').getList(1, 1, {
+      filter: `profile = "${profile.id}" && user = "${pb.authStore.record.id}"`
+    })
+
+    if (existing.items.length > 0) {
+      throw new Error('You are already a manager of this profile')
+    }
+
+    // Add as manager
+    await pb.collection('profile_managers').create({
+      profile: profile.id,
+      user: pb.authStore.record.id
+    })
+
+    // Refresh profiles list
+    await fetchProfiles()
+
+    return profile
+  }
+
   async function leaveProfile(profileId) {
     if (!pb.authStore.isValid) return
 
@@ -247,6 +305,7 @@ export const useProfilesStore = defineStore('profiles', () => {
     updateProfileSettings,
     getProfileManagers,
     inviteManager,
+    joinByManagementCode,
     leaveProfile
   }
 })

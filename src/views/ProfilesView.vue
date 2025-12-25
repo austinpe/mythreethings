@@ -8,17 +8,19 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Separator } from '@/components/ui/separator'
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
 import AppHeader from '@/components/AppHeader.vue'
-import { Plus, UserPlus, LogOut, Users } from 'lucide-vue-next'
+import { Plus, UserPlus, LogOut, Users, Copy, Check } from 'lucide-vue-next'
 
 const profiles = useProfilesStore()
 
 const showCreateForm = ref(false)
-const showInviteForm = ref(null) // profile id or null
+const showManageForm = ref(null) // profile id or null
 const newProfileName = ref('')
-const inviteEmail = ref('')
+const joinCode = ref('')
 const managers = ref({}) // { profileId: [managers] }
 const error = ref('')
+const joinError = ref('')
 const loading = ref(false)
+const copied = ref(null) // profile id that was copied
 
 function getInitials(name) {
   return name
@@ -52,25 +54,38 @@ async function createProfile() {
   }
 }
 
-async function openInviteForm(profileId) {
-  showInviteForm.value = profileId
-  inviteEmail.value = ''
+async function openManageForm(profileId) {
+  showManageForm.value = profileId
   error.value = ''
   await loadManagers(profileId)
 }
 
-async function inviteUser() {
-  if (!inviteEmail.value.trim() || !showInviteForm.value) return
+async function copyManagementCode(profileId, code) {
+  if (!code) return
 
-  error.value = ''
+  try {
+    await navigator.clipboard.writeText(code)
+    copied.value = profileId
+    setTimeout(() => {
+      copied.value = null
+    }, 2000)
+  } catch (err) {
+    console.error('Failed to copy:', err)
+  }
+}
+
+async function joinProfile() {
+  if (!joinCode.value.trim()) return
+
+  joinError.value = ''
   loading.value = true
   try {
-    await profiles.inviteManager(showInviteForm.value, inviteEmail.value.trim())
-    // Reload managers
-    managers.value[showInviteForm.value] = await profiles.getProfileManagers(showInviteForm.value)
-    inviteEmail.value = ''
+    const profile = await profiles.joinByManagementCode(joinCode.value.trim())
+    joinCode.value = ''
+    // Load managers for the new profile
+    await loadManagers(profile.id)
   } catch (e) {
-    error.value = e.message
+    joinError.value = e.message
   } finally {
     loading.value = false
   }
@@ -95,6 +110,10 @@ async function leaveProfile(profileId) {
 
 onMounted(async () => {
   await profiles.fetchProfiles()
+  // Load managers for self profile
+  if (profiles.selfProfile) {
+    await loadManagers(profiles.selfProfile.id)
+  }
   // Load managers for all managed profiles
   for (const profile of profiles.managedProfiles) {
     await loadManagers(profile.id)
@@ -112,16 +131,60 @@ onMounted(async () => {
       <!-- Self profile -->
       <Card v-if="profiles.selfProfile">
         <CardHeader>
-          <div class="flex items-center gap-3">
-            <Avatar>
-              <AvatarFallback>{{ getInitials(profiles.selfProfile.name) }}</AvatarFallback>
-            </Avatar>
-            <div>
-              <CardTitle>{{ profiles.selfProfile.name }}</CardTitle>
-              <CardDescription>Your profile</CardDescription>
+          <div class="flex items-center justify-between">
+            <div class="flex items-center gap-3">
+              <Avatar>
+                <AvatarFallback>{{ getInitials(profiles.selfProfile.name) }}</AvatarFallback>
+              </Avatar>
+              <div>
+                <CardTitle>{{ profiles.selfProfile.name }}</CardTitle>
+                <CardDescription>Your profile</CardDescription>
+              </div>
             </div>
+            <Button
+              variant="ghost"
+              size="sm"
+              class="flex flex-col items-center gap-0.5 h-auto py-1 px-2"
+              @click="openManageForm(profiles.selfProfile.id)"
+            >
+              <Users class="h-4 w-4" />
+              <span class="text-[10px]">Manage</span>
+            </Button>
           </div>
         </CardHeader>
+        <!-- Manage form for self profile -->
+        <CardContent v-if="showManageForm === profiles.selfProfile.id" class="border-t pt-4 space-y-4">
+          <div class="space-y-2">
+            <Label>Current managers</Label>
+            <div class="flex flex-wrap gap-2">
+              <div
+                v-for="manager in managers[profiles.selfProfile.id]"
+                :key="manager.id"
+                class="text-xs bg-muted px-2 py-1 rounded"
+              >
+                {{ manager.user?.email || 'Unknown' }}
+              </div>
+            </div>
+          </div>
+
+          <div class="space-y-2">
+            <Label>Management code</Label>
+            <p class="text-xs text-muted-foreground">Share this code with someone to let them co-manage your profile</p>
+            <div class="flex items-center gap-2">
+              <code class="flex-1 bg-muted px-3 py-2 rounded text-center font-mono">
+                {{ profiles.selfProfile.management_code }}
+              </code>
+              <Button variant="outline" size="icon" @click="copyManagementCode(profiles.selfProfile.id, profiles.selfProfile.management_code)">
+                <Check v-if="copied === profiles.selfProfile.id" class="h-4 w-4 text-green-500" />
+                <Copy v-else class="h-4 w-4" />
+              </Button>
+            </div>
+          </div>
+
+          <Button variant="outline" size="sm" @click="showManageForm = null">
+            Close
+          </Button>
+        </CardContent>
       </Card>
 
       <Separator />
@@ -192,10 +255,10 @@ onMounted(async () => {
                   variant="ghost"
                   size="sm"
                   class="flex flex-col items-center gap-0.5 h-auto py-1 px-2"
-                  @click="openInviteForm(profile.id)"
+                  @click="openManageForm(profile.id)"
                 >
-                  <UserPlus class="h-4 w-4" />
-                  <span class="text-[10px]">Invite</span>
+                  <Users class="h-4 w-4" />
+                  <span class="text-[10px]">Manage</span>
                 </Button>
                 <Button
                   variant="ghost"
@@ -211,8 +274,8 @@ onMounted(async () => {
             </div>
           </CardHeader>
 
-          <!-- Invite form -->
-          <CardContent v-if="showInviteForm === profile.id" class="border-t pt-4 space-y-4">
+          <!-- Manage form -->
+          <CardContent v-if="showManageForm === profile.id" class="border-t pt-4 space-y-4">
             <div class="space-y-2">
               <Label>Current managers</Label>
               <div class="flex flex-wrap gap-2">
@@ -227,25 +290,22 @@ onMounted(async () => {
             </div>
 
             <div class="space-y-2">
-              <Label for="invite-email">Invite by email</Label>
-              <div class="flex gap-2">
-                <Input
-                  id="invite-email"
-                  type="email"
-                  :model-value="inviteEmail"
-                  @update:model-value="(val) => inviteEmail = val"
-                  placeholder="parent@example.com"
-                  class="flex-1"
-                />
-                <Button @click="inviteUser" :disabled="loading || !inviteEmail.trim()">
-                  Invite
+              <Label>Management code</Label>
+              <p class="text-xs text-muted-foreground">Share this code with someone to let them co-manage this profile</p>
+              <div class="flex items-center gap-2">
+                <code class="flex-1 bg-muted px-3 py-2 rounded text-center font-mono">
+                  {{ profile.management_code }}
+                </code>
+                <Button variant="outline" size="icon" @click="copyManagementCode(profile.id, profile.management_code)">
+                  <Check v-if="copied === profile.id" class="h-4 w-4 text-green-500" />
+                  <Copy v-else class="h-4 w-4" />
                 </Button>
               </div>
             </div>
 
             <div v-if="error" class="text-sm text-destructive">{{ error }}</div>
 
-            <Button variant="outline" size="sm" @click="showInviteForm = null">
+            <Button variant="outline" size="sm" @click="showManageForm = null">
               Close
             </Button>
           </CardContent>
@@ -253,9 +313,37 @@ onMounted(async () => {
       </div>
 
       <!-- Error display -->
-      <div v-if="error && !showCreateForm && !showInviteForm" class="text-sm text-destructive text-center">
+      <div v-if="error && !showCreateForm && !showManageForm" class="text-sm text-destructive text-center">
         {{ error }}
       </div>
+
+      <Separator />
+
+      <!-- Join a profile -->
+      <Card>
+        <CardHeader>
+          <CardTitle class="text-lg flex items-center gap-2">
+            <UserPlus class="h-5 w-5" />
+            Join a Profile
+          </CardTitle>
+          <CardDescription>Enter a management code to become a co-manager</CardDescription>
+        </CardHeader>
+        <CardContent class="space-y-4">
+          <div class="flex gap-2">
+            <Input
+              :model-value="joinCode"
+              @update:model-value="(val) => joinCode = val"
+              placeholder="MGR-XXXX-XXXX"
+              class="flex-1 font-mono"
+              @keyup.enter="joinProfile"
+            />
+            <Button @click="joinProfile" :disabled="loading || !joinCode.trim()">
+              Join
+            </Button>
+          </div>
+          <p v-if="joinError" class="text-sm text-destructive">{{ joinError }}</p>
+        </CardContent>
+      </Card>
     </main>
   </div>
 </template>
