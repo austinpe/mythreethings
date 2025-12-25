@@ -1,9 +1,9 @@
-# Update.Beer - Brewery/Bar Content Management SaaS
+# My Three Things
 
 > **⚠️ CRITICAL:** When debugging, ALWAYS follow the "Debugging Process Rules" section below. These are MANDATORY and prevent wasted time.
 
 ## What This Is
-Mobile-first webapp where a user logs and refelects on the three things that they are most thankful for for that given day.
+Mobile-first gratitude journaling webapp where users log "three things" they're thankful for each day. Supports kid/family accounts with equal-access management.
 
 ## Tech Stack
 - Vue 3 (Composition API with `<script setup>`)
@@ -11,6 +11,7 @@ Mobile-first webapp where a user logs and refelects on the three things that the
 - Pinia for state management
 - Vue Router
 - Tailwind CSS v4 (CSS-first configuration)
+- shadcn-vue for UI components
 - PocketBase backend: `https://pb-3t.imstillwakingup.com/`
 - JavaScript only (no TypeScript)
 
@@ -22,17 +23,56 @@ Mobile-first webapp where a user logs and refelects on the three things that the
 
 ## PocketBase Collections Schema
 
-TBD
+### profiles
+Represents a person (user or managed kid).
 
-**users**: Built-in PocketBase collection. Email/password auth, self-registration disabled.
+| Field | Type | Required | Notes |
+|-------|------|----------|-------|
+| name | text | yes | Display name |
+| avatar | file | no | Profile picture |
+| is_managed | boolean | yes | true = kid account, false = self profile |
+| created_by | relation → users | yes | Audit only, NOT for permissions |
 
-## Core Requirements
+### profile_managers
+Equal-access management (no hierarchy). All managers have identical permissions.
 
-**MVP Features**:
-- Authentication (login/logout with PocketBase)
-- Mobile-first design
-- Dark/light mode support
-- more TBD
+| Field | Type | Required | Notes |
+|-------|------|----------|-------|
+| profile | relation → profiles | yes | The profile being managed |
+| user | relation → users | yes | User with management access |
+
+**Rules:**
+- All managers have equal rights
+- Managers can add others but can only remove themselves
+- Last manager cannot leave (prevents orphans)
+
+### entries
+Daily entry container.
+
+| Field | Type | Required | Notes |
+|-------|------|----------|-------|
+| profile | relation → profiles | yes | Who logged this |
+| date | date | yes | Entry date (unique per profile) |
+| bonus_notes | text | no | Micro-journal field |
+
+### things
+Individual gratitude items.
+
+| Field | Type | Required | Notes |
+|-------|------|----------|-------|
+| entry | relation → entries | yes | Parent entry |
+| content | text | yes | The gratitude text |
+| order | number | yes | Display order (1, 2, 3...) |
+
+**users**: Built-in PocketBase collection. Email/password auth, self-registration enabled.
+
+## Core Features (V1)
+- Authentication (login/register with PocketBase)
+- Daily three things entry (expandable to more)
+- Bonus notes (micro-journal)
+- Entry history with calendar
+- Kid profiles with equal-access management
+- Dark/light mode with theme selection
 
 ## 🚨 CRITICAL: Debugging Process Rules (MUST FOLLOW)
 
