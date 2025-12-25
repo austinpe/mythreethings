@@ -1,34 +1,7 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import pb from '@/lib/pocketbase'
-
-// Generate a random share code (e.g., "ABC-123-XYZ")
-function generateShareCode() {
-  const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789' // Avoid confusing chars like 0/O, 1/I
-  const segments = []
-  for (let s = 0; s < 3; s++) {
-    let segment = ''
-    for (let i = 0; i < 3; i++) {
-      segment += chars.charAt(Math.floor(Math.random() * chars.length))
-    }
-    segments.push(segment)
-  }
-  return segments.join('-')
-}
-
-// Generate a management code (e.g., "MGR-ABCD-1234")
-function generateManagementCode() {
-  const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'
-  let code = 'MGR-'
-  for (let i = 0; i < 4; i++) {
-    code += chars.charAt(Math.floor(Math.random() * chars.length))
-  }
-  code += '-'
-  for (let i = 0; i < 4; i++) {
-    code += chars.charAt(Math.floor(Math.random() * chars.length))
-  }
-  return code
-}
+import { generateShareCode, generateManagementCode } from '@/lib/codeGenerator'
 
 export const useAuthStore = defineStore('auth', () => {
   const user = ref(pb.authStore.record)

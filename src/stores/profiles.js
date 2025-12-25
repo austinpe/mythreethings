@@ -2,34 +2,7 @@ import { defineStore } from 'pinia'
 import { ref, computed, watch } from 'vue'
 import pb from '@/lib/pocketbase'
 import { useTheme } from '@/composables/useTheme'
-
-// Generate a random share code (e.g., "ABC-123-XYZ")
-function generateShareCode() {
-  const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789' // Avoid confusing chars like 0/O, 1/I
-  const segments = []
-  for (let s = 0; s < 3; s++) {
-    let segment = ''
-    for (let i = 0; i < 3; i++) {
-      segment += chars.charAt(Math.floor(Math.random() * chars.length))
-    }
-    segments.push(segment)
-  }
-  return segments.join('-')
-}
-
-// Generate a management code (e.g., "MGR-ABCD-1234") - different format to distinguish
-function generateManagementCode() {
-  const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'
-  let code = 'MGR-'
-  for (let i = 0; i < 4; i++) {
-    code += chars.charAt(Math.floor(Math.random() * chars.length))
-  }
-  code += '-'
-  for (let i = 0; i < 4; i++) {
-    code += chars.charAt(Math.floor(Math.random() * chars.length))
-  }
-  return code
-}
+import { generateShareCode, generateManagementCode } from '@/lib/codeGenerator'
 
 export const useProfilesStore = defineStore('profiles', () => {
   const profiles = ref([])
@@ -196,36 +169,6 @@ export const useProfilesStore = defineStore('profiles', () => {
     }))
   }
 
-  async function inviteManager(profileId, email) {
-    // Find user by email
-    const users = await pb.collection('users').getList(1, 1, {
-      filter: `email = "${email}"`
-    })
-
-    if (users.items.length === 0) {
-      throw new Error('No user found with that email')
-    }
-
-    const user = users.items[0]
-
-    // Check if already a manager
-    const existing = await pb.collection('profile_managers').getList(1, 1, {
-      filter: `profile = "${profileId}" && user = "${user.id}"`
-    })
-
-    if (existing.items.length > 0) {
-      throw new Error('This user is already a manager')
-    }
-
-    // Add as manager
-    await pb.collection('profile_managers').create({
-      profile: profileId,
-      user: user.id
-    })
-
-    return user
-  }
-
   async function joinByManagementCode(managementCode) {
     if (!pb.authStore.isValid) return null
 
@@ -304,7 +247,6 @@ export const useProfilesStore = defineStore('profiles', () => {
     updateProfile,
     updateProfileSettings,
     getProfileManagers,
-    inviteManager,
     joinByManagementCode,
     leaveProfile
   }
