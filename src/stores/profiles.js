@@ -66,6 +66,9 @@ export const useProfilesStore = defineStore('profiles', () => {
         await createSelfProfile()
       }
 
+      // Ensure all profiles have share codes (lazy migration for existing profiles)
+      await ensureShareCodes()
+
       // Set active profile to saved one or default to self
       if (!activeProfileId.value || !profiles.value.find(p => p.id === activeProfileId.value)) {
         const self = profiles.value.find(p => !p.is_managed)
@@ -94,6 +97,19 @@ export const useProfilesStore = defineStore('profiles', () => {
     })
 
     profiles.value.push(profile)
+  }
+
+  async function ensureShareCodes() {
+    // Generate share codes for any profiles missing them
+    for (let i = 0; i < profiles.value.length; i++) {
+      const profile = profiles.value[i]
+      if (!profile.share_code) {
+        const updated = await pb.collection('profiles').update(profile.id, {
+          share_code: generateShareCode()
+        })
+        profiles.value[i] = updated
+      }
+    }
   }
 
   function setActiveProfile(profileId) {
