@@ -147,6 +147,32 @@ export const useEntriesStore = defineStore('entries', () => {
     }
   }
 
+  async function getEntriesForMonth(profileId, year, month) {
+    const startDate = new Date(year, month, 1)
+    const endDate = new Date(year, month + 1, 0)
+
+    const entries = await pb.collection('entries').getFullList({
+      filter: `profile = "${profileId}" && date >= "${formatDate(startDate)}" && date <= "${formatDate(endDate)}"`,
+      sort: '-date'
+    })
+
+    return entries
+  }
+
+  async function getEntry(profileId, dateStr) {
+    const entries = await pb.collection('entries').getList(1, 1, {
+      filter: `profile = "${profileId}" && date = "${dateStr}"`
+    })
+
+    if (entries.items.length > 0) {
+      currentEntry.value = entries.items[0]
+      await fetchThings()
+      return currentEntry.value
+    }
+
+    return null
+  }
+
   function clear() {
     currentEntry.value = null
     things.value = []
@@ -158,6 +184,8 @@ export const useEntriesStore = defineStore('entries', () => {
     loading,
     saving,
     getOrCreateEntry,
+    getEntriesForMonth,
+    getEntry,
     fetchThings,
     saveThing,
     addThing,
