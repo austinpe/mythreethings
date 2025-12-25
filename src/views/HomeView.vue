@@ -3,15 +3,28 @@ import { ref, computed, watch, onMounted, onBeforeUnmount } from 'vue'
 import { onBeforeRouteLeave } from 'vue-router'
 import { useProfilesStore } from '@/stores/profiles'
 import { useEntriesStore } from '@/stores/entries'
+import { useFollowersStore } from '@/stores/followers'
 import { Button } from '@/components/ui/button'
 import { Textarea } from '@/components/ui/textarea'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import AppHeader from '@/components/AppHeader.vue'
 import ThingInput from '@/components/ThingInput.vue'
-import { Plus, ChevronLeft, ChevronRight } from 'lucide-vue-next'
+import { Plus, ChevronLeft, ChevronRight, Lightbulb } from 'lucide-vue-next'
 
 const profiles = useProfilesStore()
 const entries = useEntriesStore()
+const followers = useFollowersStore()
+
+// Check if we're viewing another profile (read-only mode)
+const isViewingOther = computed(() => followers.isViewingOther)
+
+// The profile we're viewing entries for
+const targetProfile = computed(() => {
+  if (isViewingOther.value) {
+    return followers.viewingProfile
+  }
+  return profiles.activeProfile
+})
 
 // Track pending changes for save on navigation
 const pendingThingIndex = ref(null)
@@ -108,20 +121,29 @@ onMounted(async () => {
 
 // Watch for profile or date changes
 watch(() => profiles.activeProfileId, async () => {
-  await loadEntry()
+  if (!isViewingOther.value) {
+    await loadEntry()
+  }
 })
 
 watch(currentDate, async () => {
   await loadEntry()
 })
 
+// Watch for viewing profile changes
+watch(() => followers.viewingProfile, async () => {
+  await loadEntry()
+})
+
 async function loadEntry() {
-  if (!profiles.activeProfile) return
+  if (!targetProfile.value) return
 
-  // Save any pending changes and clear timers before loading new entry
-  await saveAllPending()
+  // Only save pending changes if not in read-only mode
+  if (!isViewingOther.value) {
+    await saveAllPending()
+  }
 
-  await entries.loadEntryForDate(profiles.activeProfile.id, currentDate.value)
+  await entries.loadEntryForDate(targetProfile.value.id, currentDate.value)
 
   // Populate local values from loaded things
   const newValues = ['', '', '']
@@ -263,8 +285,8 @@ onBeforeUnmount(async () => {
       @date-select="handleDateSelect"
     />
 
-    <!-- Managed profile banner -->
-    <div v-if="isManaged" class="bg-primary/10 border-b border-primary/20">
+    <!-- Managed profile banner (only when editing own profile) -->
+    <div v-if="isManaged && !isViewingOther" class="bg-primary/10 border-b border-primary/20">
       <div class="container mx-auto px-4 py-2 text-center text-sm text-primary">
         Logging for <strong>{{ profiles.activeProfile?.name }}</strong>
       </div>
@@ -291,7 +313,52 @@ onBeforeUnmount(async () => {
         Loading...
       </div>
 
-      <!-- Entry form -->
+      <!-- Read-only view (viewing another profile) -->
+      <div v-else-if="isViewingOther" class="space-y-6">
+        <Card>
+          <CardHeader>
+            <CardTitle class="text-lg">{{ targetProfile?.name }}'s gratitude</CardTitle>
+          </CardHeader>
+          <CardContent class="space-y-3">
+            <!-- Display things as read-only list -->
+            <div
+              v-for="(thing, index) in entries.things"
+              :key="thing.id"
+              class="flex items-center gap-2"
+            >
+              <span class="flex-shrink-0 w-8 h-8 rounded-full bg-primary/10 text-primary flex items-center justify-center text-sm font-medium">
+                {{ index + 1 }}
+              </span>
+              <p class="flex-1 py-2">{{ thing.content }}</p>
+            </div>
+
+            <!-- Empty state -->
+            <p v-if="entries.things.length === 0" class="text-center text-muted-foreground py-4">
+              No entries for this day yet.
+            </p>
+          </CardContent>
+        </Card>
+
+        <!-- Bonus notes (read-only) -->
+        <Card v-if="entries.currentEntry?.bonus_notes">
+          <CardHeader>
+            <CardTitle class="text-lg">Notes</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <p class="text-muted-foreground whitespace-pre-wrap">{{ entries.currentEntry.bonus_notes }}</p>
+          </CardContent>
+        </Card>
+
+        <!-- Suggest something button (placeholder for Phase 9C) -->
+        <div class="flex justify-center">
+          <Button variant="outline" disabled>
+            <Lightbulb class="h-4 w-4 mr-2" />
+            Suggest something
+          </Button>
+        </div>
+      </div>
+
+      <!-- Entry form (editing own profile) -->
       <div v-else class="space-y-6">
         <Card>
           <CardHeader>
