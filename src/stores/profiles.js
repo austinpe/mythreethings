@@ -191,8 +191,8 @@ export const useProfilesStore = defineStore('profiles', () => {
     })
     return managers.map(m => ({
       id: m.id,
-      user: m.expand?.user,
-      userId: m.user
+      userId: m.user,
+      name: m.expand?.user?.name || 'Unknown'
     }))
   }
 

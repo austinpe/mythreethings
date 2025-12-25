@@ -162,7 +162,7 @@ onMounted(async () => {
                 :key="manager.id"
                 class="text-xs bg-muted px-2 py-1 rounded"
               >
-                {{ manager.user?.email || 'Unknown' }}
+                {{ manager.name }}
               </div>
             </div>
           </div>
@@ -284,7 +284,7 @@ onMounted(async () => {
                   :key="manager.id"
                   class="text-xs bg-muted px-2 py-1 rounded"
                 >
-                  {{ manager.user?.email || 'Unknown' }}
+                  {{ manager.name }}
                 </div>
               </div>
             </div>
