@@ -2,6 +2,20 @@ import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import pb from '@/lib/pocketbase'
 
+// Generate a random share code (e.g., "ABC-123-XYZ")
+function generateShareCode() {
+  const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789' // Avoid confusing chars like 0/O, 1/I
+  const segments = []
+  for (let s = 0; s < 3; s++) {
+    let segment = ''
+    for (let i = 0; i < 3; i++) {
+      segment += chars.charAt(Math.floor(Math.random() * chars.length))
+    }
+    segments.push(segment)
+  }
+  return segments.join('-')
+}
+
 export const useAuthStore = defineStore('auth', () => {
   const user = ref(pb.authStore.record)
   const token = ref(pb.authStore.token)
@@ -21,13 +35,30 @@ export const useAuthStore = defineStore('auth', () => {
   }
 
   async function register(email, password, name) {
-    // Create user account
-    await pb.collection('users').create({
-      email,
-      password,
-      passwordConfirm: password,
-      name
-    })
+    try {
+      // Create user account
+      await pb.collection('users').create({
+        email,
+        password,
+        passwordConfirm: password,
+        name
+      })
+    } catch (err) {
+      // Extract detailed error message from PocketBase response
+      if (err.response?.data) {
+        const data = err.response.data
+        const messages = []
+        for (const [field, fieldError] of Object.entries(data)) {
+          if (fieldError.message) {
+            messages.push(`${field}: ${fieldError.message}`)
+          }
+        }
+        if (messages.length > 0) {
+          throw new Error(messages.join(', '))
+        }
+      }
+      throw err
+    }
     // Then log them in
     return await login(email, password)
   }
@@ -56,7 +87,8 @@ export const useAuthStore = defineStore('auth', () => {
       const profile = await pb.collection('profiles').create({
         name: pb.authStore.record.name || pb.authStore.record.email.split('@')[0],
         is_managed: false,
-        created_by: pb.authStore.record.id
+        created_by: pb.authStore.record.id,
+        share_code: generateShareCode()
       })
 
       await pb.collection('profile_managers').create({

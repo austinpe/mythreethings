@@ -3,6 +3,20 @@ import { ref, computed, watch } from 'vue'
 import pb from '@/lib/pocketbase'
 import { useTheme } from '@/composables/useTheme'
 
+// Generate a random share code (e.g., "ABC-123-XYZ")
+function generateShareCode() {
+  const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789' // Avoid confusing chars like 0/O, 1/I
+  const segments = []
+  for (let s = 0; s < 3; s++) {
+    let segment = ''
+    for (let i = 0; i < 3; i++) {
+      segment += chars.charAt(Math.floor(Math.random() * chars.length))
+    }
+    segments.push(segment)
+  }
+  return segments.join('-')
+}
+
 export const useProfilesStore = defineStore('profiles', () => {
   const profiles = ref([])
   const activeProfileId = ref(localStorage.getItem('activeProfileId') || null)
@@ -70,7 +84,8 @@ export const useProfilesStore = defineStore('profiles', () => {
     const profile = await pb.collection('profiles').create({
       name: pb.authStore.record.name || pb.authStore.record.email.split('@')[0],
       is_managed: false,
-      created_by: pb.authStore.record.id
+      created_by: pb.authStore.record.id,
+      share_code: generateShareCode()
     })
 
     await pb.collection('profile_managers').create({
@@ -92,7 +107,8 @@ export const useProfilesStore = defineStore('profiles', () => {
     const profile = await pb.collection('profiles').create({
       name,
       is_managed: true,
-      created_by: pb.authStore.record.id
+      created_by: pb.authStore.record.id,
+      share_code: generateShareCode()
     })
 
     await pb.collection('profile_managers').create({
