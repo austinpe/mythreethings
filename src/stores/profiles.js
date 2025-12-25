@@ -78,6 +78,78 @@ export const useProfilesStore = defineStore('profiles', () => {
     return updated
   }
 
+  async function getProfileManagers(profileId) {
+    const managers = await pb.collection('profile_managers').getFullList({
+      filter: `profile = "${profileId}"`,
+      expand: 'user'
+    })
+    return managers.map(m => ({
+      id: m.id,
+      user: m.expand?.user,
+      userId: m.user
+    }))
+  }
+
+  async function inviteManager(profileId, email) {
+    // Find user by email
+    const users = await pb.collection('users').getList(1, 1, {
+      filter: `email = "${email}"`
+    })
+
+    if (users.items.length === 0) {
+      throw new Error('No user found with that email')
+    }
+
+    const user = users.items[0]
+
+    // Check if already a manager
+    const existing = await pb.collection('profile_managers').getList(1, 1, {
+      filter: `profile = "${profileId}" && user = "${user.id}"`
+    })
+
+    if (existing.items.length > 0) {
+      throw new Error('This user is already a manager')
+    }
+
+    // Add as manager
+    await pb.collection('profile_managers').create({
+      profile: profileId,
+      user: user.id
+    })
+
+    return user
+  }
+
+  async function leaveProfile(profileId) {
+    if (!pb.authStore.isValid) return
+
+    // Find the manager record for this user
+    const managers = await pb.collection('profile_managers').getFullList({
+      filter: `profile = "${profileId}"`
+    })
+
+    // Check if this is the last manager
+    if (managers.length <= 1) {
+      throw new Error('Cannot leave - you are the only manager')
+    }
+
+    // Find and delete own manager record
+    const myRecord = managers.find(m => m.user === pb.authStore.record.id)
+    if (myRecord) {
+      await pb.collection('profile_managers').delete(myRecord.id)
+    }
+
+    // If leaving active profile, switch to self
+    if (activeProfileId.value === profileId) {
+      const self = profiles.value.find(p => !p.is_managed && p.id !== profileId)
+      if (self) {
+        setActiveProfile(self.id)
+      }
+    }
+
+    await fetchProfiles()
+  }
+
   return {
     profiles,
     activeProfileId,
@@ -88,6 +160,9 @@ export const useProfilesStore = defineStore('profiles', () => {
     fetchProfiles,
     setActiveProfile,
     createManagedProfile,
-    updateProfile
+    updateProfile,
+    getProfileManagers,
+    inviteManager,
+    leaveProfile
   }
 })
