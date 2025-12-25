@@ -1,11 +1,15 @@
 import { defineStore } from 'pinia'
-import { ref, computed } from 'vue'
+import { ref, computed, watch } from 'vue'
 import pb from '@/lib/pocketbase'
+import { useTheme } from '@/composables/useTheme'
 
 export const useProfilesStore = defineStore('profiles', () => {
   const profiles = ref([])
   const activeProfileId = ref(localStorage.getItem('activeProfileId') || null)
   const loading = ref(false)
+
+  // Get theme composable for applying profile settings
+  const theme = useTheme()
 
   const activeProfile = computed(() => {
     return profiles.value.find(p => p.id === activeProfileId.value) || profiles.value[0] || null
@@ -18,6 +22,13 @@ export const useProfilesStore = defineStore('profiles', () => {
   const managedProfiles = computed(() => {
     return profiles.value.filter(p => p.is_managed)
   })
+
+  // Apply theme when active profile changes
+  watch(activeProfile, (profile) => {
+    if (profile?.settings) {
+      theme.loadFromProfile(profile.settings)
+    }
+  }, { immediate: true })
 
   async function fetchProfiles() {
     if (!pb.authStore.isValid) return
@@ -99,6 +110,22 @@ export const useProfilesStore = defineStore('profiles', () => {
     if (index !== -1) {
       profiles.value[index] = updated
     }
+    return updated
+  }
+
+  async function updateProfileSettings(profileId, settings) {
+    // Merge with existing settings
+    const profile = profiles.value.find(p => p.id === profileId)
+    const currentSettings = profile?.settings || {}
+    const newSettings = { ...currentSettings, ...settings }
+
+    const updated = await updateProfile(profileId, { settings: newSettings })
+
+    // If this is the active profile, apply the theme immediately
+    if (profileId === activeProfileId.value) {
+      theme.loadFromProfile(newSettings)
+    }
+
     return updated
   }
 
@@ -185,6 +212,7 @@ export const useProfilesStore = defineStore('profiles', () => {
     setActiveProfile,
     createManagedProfile,
     updateProfile,
+    updateProfileSettings,
     getProfileManagers,
     inviteManager,
     leaveProfile

@@ -1,7 +1,8 @@
-import { ref, onMounted } from 'vue'
+import { ref, watch } from 'vue'
 
 const THEME_MODE_KEY = 'theme-mode'
 const THEME_COLOR_KEY = 'theme-color'
+const THEME_TIMEZONE_KEY = 'theme-timezone'
 
 // Color theme definitions using oklch format to match Tailwind v4
 const colorThemes = {
@@ -42,57 +43,103 @@ const colorThemes = {
   }
 }
 
-export function useTheme() {
-  const mode = ref(localStorage.getItem(THEME_MODE_KEY) || 'system')
-  const color = ref(localStorage.getItem(THEME_COLOR_KEY) || 'violet')
+// Shared state across all useTheme() calls
+const mode = ref(localStorage.getItem(THEME_MODE_KEY) || 'system')
+const color = ref(localStorage.getItem(THEME_COLOR_KEY) || 'violet')
+const timezone = ref(localStorage.getItem(THEME_TIMEZONE_KEY) || Intl.DateTimeFormat().resolvedOptions().timeZone)
 
-  function applyTheme() {
-    const root = document.documentElement
-    root.classList.remove('dark')
+// Track if we've set up the system theme listener
+let systemThemeListenerSetup = false
 
-    // Apply dark mode
-    if (mode.value === 'dark') {
+function applyTheme() {
+  const root = document.documentElement
+  root.classList.remove('dark')
+
+  // Apply dark mode
+  if (mode.value === 'dark') {
+    root.classList.add('dark')
+  } else if (mode.value === 'system') {
+    if (window.matchMedia('(prefers-color-scheme: dark)').matches) {
       root.classList.add('dark')
-    } else if (mode.value === 'system') {
-      if (window.matchMedia('(prefers-color-scheme: dark)').matches) {
-        root.classList.add('dark')
-      }
     }
-
-    // Apply color theme
-    const themeColors = colorThemes[color.value] || colorThemes.violet
-    root.style.setProperty('--primary', themeColors.primary)
-    root.style.setProperty('--primary-foreground', themeColors.primaryForeground)
-    root.style.setProperty('--ring', themeColors.ring)
   }
 
-  function setMode(newMode) {
-    mode.value = newMode
-    localStorage.setItem(THEME_MODE_KEY, newMode)
-    applyTheme()
-  }
+  // Apply color theme
+  const themeColors = colorThemes[color.value] || colorThemes.violet
+  root.style.setProperty('--primary', themeColors.primary)
+  root.style.setProperty('--primary-foreground', themeColors.primaryForeground)
+  root.style.setProperty('--ring', themeColors.ring)
+}
 
-  function setColor(newColor) {
-    color.value = newColor
-    localStorage.setItem(THEME_COLOR_KEY, newColor)
-    applyTheme()
-  }
-
-  // Listen for system theme changes
-  onMounted(() => {
-    applyTheme()
+export function useTheme() {
+  // Set up system theme change listener once
+  if (!systemThemeListenerSetup) {
+    systemThemeListenerSetup = true
     window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => {
       if (mode.value === 'system') {
         applyTheme()
       }
     })
-  })
+    // Apply theme on initial load
+    applyTheme()
+  }
+
+  function setMode(newMode, saveToLocalStorage = true) {
+    mode.value = newMode
+    if (saveToLocalStorage) {
+      localStorage.setItem(THEME_MODE_KEY, newMode)
+    }
+    applyTheme()
+  }
+
+  function setColor(newColor, saveToLocalStorage = true) {
+    color.value = newColor
+    if (saveToLocalStorage) {
+      localStorage.setItem(THEME_COLOR_KEY, newColor)
+    }
+    applyTheme()
+  }
+
+  function setTimezone(newTimezone, saveToLocalStorage = true) {
+    timezone.value = newTimezone
+    if (saveToLocalStorage) {
+      localStorage.setItem(THEME_TIMEZONE_KEY, newTimezone)
+    }
+  }
+
+  // Load settings from a profile's settings object
+  function loadFromProfile(settings) {
+    if (!settings) return
+
+    if (settings.theme_mode) {
+      setMode(settings.theme_mode, false)
+    }
+    if (settings.theme_color) {
+      setColor(settings.theme_color, false)
+    }
+    if (settings.timezone) {
+      setTimezone(settings.timezone, false)
+    }
+  }
+
+  // Get current settings as an object (for saving to profile)
+  function getSettings() {
+    return {
+      theme_mode: mode.value,
+      theme_color: color.value,
+      timezone: timezone.value
+    }
+  }
 
   return {
     mode,
     color,
+    timezone,
     setMode,
     setColor,
+    setTimezone,
+    loadFromProfile,
+    getSettings,
     applyTheme
   }
 }

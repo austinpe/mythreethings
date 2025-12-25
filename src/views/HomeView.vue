@@ -17,6 +17,11 @@ const entries = useEntriesStore()
 const pendingThingIndex = ref(null)
 const pendingBonusNotes = ref(false)
 
+// Debounce timers for auto-save
+const DEBOUNCE_DELAY = 1500 // 1.5 seconds
+let thingDebounceTimer = null
+let bonusNotesDebounceTimer = null
+
 const currentDate = ref(new Date())
 const initialLoading = ref(true)
 
@@ -113,6 +118,9 @@ watch(currentDate, async () => {
 async function loadEntry() {
   if (!profiles.activeProfile) return
 
+  // Save any pending changes and clear timers before loading new entry
+  await saveAllPending()
+
   await entries.loadEntryForDate(profiles.activeProfile.id, currentDate.value)
 
   // Populate local values from loaded things
@@ -134,11 +142,48 @@ async function loadEntry() {
   bonusNotes.value = entries.currentEntry?.bonus_notes || ''
 }
 
+function clearAllTimers() {
+  if (thingDebounceTimer) {
+    clearTimeout(thingDebounceTimer)
+    thingDebounceTimer = null
+  }
+  if (bonusNotesDebounceTimer) {
+    clearTimeout(bonusNotesDebounceTimer)
+    bonusNotesDebounceTimer = null
+  }
+}
+
 function handleThingFocus(index) {
   pendingThingIndex.value = index
 }
 
+function handleThingInput(index, value) {
+  // Update local value
+  thingValues.value[index] = value
+  pendingThingIndex.value = index
+
+  // Clear existing timer for this thing
+  if (thingDebounceTimer) {
+    clearTimeout(thingDebounceTimer)
+  }
+
+  // Set new debounced save
+  thingDebounceTimer = setTimeout(async () => {
+    thingDebounceTimer = null
+    await entries.saveThing(index, value)
+    // Only clear pending if still on same index
+    if (pendingThingIndex.value === index) {
+      pendingThingIndex.value = null
+    }
+  }, DEBOUNCE_DELAY)
+}
+
 async function handleThingBlur(index, value) {
+  // Cancel debounce timer since we're saving immediately
+  if (thingDebounceTimer) {
+    clearTimeout(thingDebounceTimer)
+    thingDebounceTimer = null
+  }
   pendingThingIndex.value = null
   await entries.saveThing(index, value)
 }
@@ -157,12 +202,36 @@ function handleBonusNotesFocus() {
   pendingBonusNotes.value = true
 }
 
+function handleBonusNotesInput() {
+  pendingBonusNotes.value = true
+
+  // Clear existing timer
+  if (bonusNotesDebounceTimer) {
+    clearTimeout(bonusNotesDebounceTimer)
+  }
+
+  // Set new debounced save
+  bonusNotesDebounceTimer = setTimeout(async () => {
+    bonusNotesDebounceTimer = null
+    await entries.saveBonusNotes(bonusNotes.value)
+    pendingBonusNotes.value = false
+  }, DEBOUNCE_DELAY)
+}
+
 async function handleBonusNotesBlur() {
+  // Cancel debounce timer since we're saving immediately
+  if (bonusNotesDebounceTimer) {
+    clearTimeout(bonusNotesDebounceTimer)
+    bonusNotesDebounceTimer = null
+  }
   pendingBonusNotes.value = false
   await entries.saveBonusNotes(bonusNotes.value)
 }
 
 async function saveAllPending() {
+  // Clear any pending debounce timers
+  clearAllTimers()
+
   // Save any pending thing
   if (pendingThingIndex.value !== null) {
     await entries.saveThing(pendingThingIndex.value, thingValues.value[pendingThingIndex.value])
@@ -232,7 +301,8 @@ onBeforeUnmount(async () => {
             <ThingInput
               v-for="(value, index) in thingValues"
               :key="index"
-              v-model="thingValues[index]"
+              :model-value="thingValues[index]"
+              @update:model-value="handleThingInput(index, $event)"
               :index="index"
               :can-remove="thingValues.length > 3"
               :placeholder="`Thing #${index + 1}`"
@@ -241,15 +311,22 @@ onBeforeUnmount(async () => {
               @remove="removeThing(index)"
             />
 
-            <Button
-              variant="outline"
-              size="sm"
-              class="w-full"
-              @click="addThing"
-            >
-              <Plus class="h-4 w-4 mr-2" />
-              Add another
-            </Button>
+            <!-- Aligned with ThingInput: w-8 number + gap-2 = 40px left, gap-2 + w-8 placeholder = 40px right -->
+            <div class="flex">
+              <div class="w-8 flex-shrink-0" />
+              <div class="flex-1 mx-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  class="w-full"
+                  @click="addThing"
+                >
+                  <Plus class="h-4 w-4 mr-2" />
+                  Add another
+                </Button>
+              </div>
+              <div class="w-8 flex-shrink-0" />
+            </div>
           </CardContent>
         </Card>
 
@@ -261,6 +338,7 @@ onBeforeUnmount(async () => {
           <CardContent>
             <Textarea
               v-model="bonusNotes"
+              @input="handleBonusNotesInput"
               @focus="handleBonusNotesFocus"
               @blur="handleBonusNotesBlur"
               placeholder="Optional notes about your day..."
