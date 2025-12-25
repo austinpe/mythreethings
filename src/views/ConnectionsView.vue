@@ -112,6 +112,7 @@ onMounted(async () => {
   await profiles.fetchProfiles()
   if (profiles.activeProfile) {
     await followers.fetchFollowing(profiles.activeProfile.id)
+    await followers.fetchFollowers(profiles.activeProfile.id)
     await followers.fetchPendingRequests(managedProfileIds.value)
   }
 })
@@ -271,6 +272,32 @@ onMounted(async () => {
           class="text-sm text-muted-foreground text-center py-4"
         >
           You're not following anyone yet. Enter a share code above to get started.
+        </p>
+      </div>
+
+      <Separator />
+
+      <!-- Followers (who follows you) -->
+      <div class="space-y-4">
+        <h2 class="font-semibold">Followers</h2>
+
+        <Card v-for="follower in followers.followers" :key="follower.id">
+          <CardContent class="py-4">
+            <div class="flex items-center gap-3">
+              <Avatar>
+                <AvatarFallback>{{ getInitials(follower.profile?.name) }}</AvatarFallback>
+              </Avatar>
+              <p class="font-medium">{{ follower.profile?.name }}</p>
+            </div>
+          </CardContent>
+        </Card>
+
+        <!-- Empty state -->
+        <p
+          v-if="!followers.followers.length"
+          class="text-sm text-muted-foreground text-center py-4"
+        >
+          No one is following you yet. Share your code above to let others follow you.
         </p>
       </div>
     </main>

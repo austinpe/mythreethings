@@ -1,5 +1,5 @@
 <script setup>
-import { computed } from 'vue'
+import { computed, onMounted } from 'vue'
 import { useTheme } from '@/composables/useTheme'
 import { useAuthStore } from '@/stores/auth'
 import { useProfilesStore } from '@/stores/profiles'
@@ -47,6 +47,10 @@ const timezones = [
 
 const isManaged = computed(() => profiles.activeProfile?.is_managed ?? false)
 const profileName = computed(() => profiles.activeProfile?.name ?? 'Your')
+
+onMounted(async () => {
+  await profiles.fetchProfiles()
+})
 
 async function saveToProfile() {
   if (!profiles.activeProfile) return

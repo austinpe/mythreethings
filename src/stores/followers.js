@@ -5,6 +5,8 @@ import pb from '@/lib/pocketbase'
 export const useFollowersStore = defineStore('followers', () => {
   // Profiles that the active profile follows
   const following = ref([])
+  // Profiles that follow the active profile (accepted only)
+  const followers = ref([])
   // Pending follow requests to profiles I manage
   const pendingRequests = ref([])
   // Currently viewing another profile's entries
@@ -41,6 +43,29 @@ export const useFollowersStore = defineStore('followers', () => {
       })).filter(f => f.profile)
     } finally {
       loading.value = false
+    }
+  }
+
+  /**
+   * Fetch profiles that follow the active profile (accepted only)
+   */
+  async function fetchFollowers(activeProfileId) {
+    if (!activeProfileId) return
+
+    try {
+      const records = await pb.collection('profile_followers').getFullList({
+        filter: `following = "${activeProfileId}" && status = "accepted"`,
+        expand: 'follower',
+        requestKey: null
+      })
+
+      followers.value = records.map(r => ({
+        id: r.id,
+        profile: r.expand?.follower,
+        created: r.created
+      })).filter(f => f.profile)
+    } catch (err) {
+      console.error('Error fetching followers:', err)
     }
   }
 
@@ -172,12 +197,14 @@ export const useFollowersStore = defineStore('followers', () => {
 
   function clear() {
     following.value = []
+    followers.value = []
     pendingRequests.value = []
     viewingProfile.value = null
   }
 
   return {
     following,
+    followers,
     pendingRequests,
     viewingProfile,
     loading,
@@ -185,6 +212,7 @@ export const useFollowersStore = defineStore('followers', () => {
     pendingFollowing,
     isViewingOther,
     fetchFollowing,
+    fetchFollowers,
     fetchPendingRequests,
     followByCode,
     acceptFollowRequest,
