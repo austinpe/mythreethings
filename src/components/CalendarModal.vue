@@ -2,6 +2,7 @@
 import { ref, computed, watch } from 'vue'
 import { useProfilesStore } from '@/stores/profiles'
 import { useEntriesStore } from '@/stores/entries'
+import { useFollowersStore } from '@/stores/followers'
 import { Button } from '@/components/ui/button'
 import {
   Dialog,
@@ -27,6 +28,15 @@ const emit = defineEmits(['update:open', 'select'])
 
 const profiles = useProfilesStore()
 const entries = useEntriesStore()
+const followers = useFollowersStore()
+
+// The profile we're viewing entries for (own or followed)
+const targetProfile = computed(() => {
+  if (followers.isViewingOther) {
+    return followers.viewingProfile
+  }
+  return profiles.activeProfile
+})
 
 const currentDate = ref(new Date())
 const monthEntries = ref([])
@@ -84,12 +94,12 @@ function isToday(year, month, day) {
 }
 
 async function loadMonth() {
-  if (!profiles.activeProfile) return
+  if (!targetProfile.value) return
 
   loading.value = true
   try {
     monthEntries.value = await entries.getEntriesForMonth(
-      profiles.activeProfile.id,
+      targetProfile.value.id,
       currentDate.value.getFullYear(),
       currentDate.value.getMonth()
     )
