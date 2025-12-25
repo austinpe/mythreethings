@@ -32,11 +32,12 @@ export const useAuthStore = defineStore('auth', () => {
       })
     } catch (err) {
       // Extract detailed error message from PocketBase response
-      if (err.response?.data) {
-        const data = err.response.data
+      // PocketBase SDK puts field errors in err.data.data or err.response.data
+      const fieldErrors = err.data?.data || err.response?.data
+      if (fieldErrors && typeof fieldErrors === 'object') {
         const messages = []
-        for (const [field, fieldError] of Object.entries(data)) {
-          if (fieldError.message) {
+        for (const [field, fieldError] of Object.entries(fieldErrors)) {
+          if (fieldError?.message) {
             messages.push(`${field}: ${fieldError.message}`)
           }
         }
@@ -44,7 +45,8 @@ export const useAuthStore = defineStore('auth', () => {
           throw new Error(messages.join(', '))
         }
       }
-      throw err
+      // Fallback to the error message
+      throw new Error(err.message || 'Registration failed')
     }
     // Then log them in
     return await login(email, password)
