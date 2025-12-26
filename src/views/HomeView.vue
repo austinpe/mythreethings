@@ -5,6 +5,7 @@ import { useProfilesStore } from '@/stores/profiles'
 import { useEntriesStore } from '@/stores/entries'
 import { useFollowersStore } from '@/stores/followers'
 import { useSuggestionsStore } from '@/stores/suggestions'
+import { useReactionsStore } from '@/stores/reactions'
 import { Button } from '@/components/ui/button'
 import { Textarea } from '@/components/ui/textarea'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -12,12 +13,16 @@ import AppHeader from '@/components/AppHeader.vue'
 import ThingInput from '@/components/ThingInput.vue'
 import SuggestionDialog from '@/components/SuggestionDialog.vue'
 import SuggestionsBanner from '@/components/SuggestionsBanner.vue'
+import ReactionPicker from '@/components/ReactionPicker.vue'
+import ReactionDisplay from '@/components/ReactionDisplay.vue'
+import { getEmojiByCode } from '@/lib/reactions'
 import { Plus, ChevronLeft, ChevronRight, Lightbulb } from 'lucide-vue-next'
 
 const profiles = useProfilesStore()
 const entries = useEntriesStore()
 const followers = useFollowersStore()
 const suggestions = useSuggestionsStore()
+const reactions = useReactionsStore()
 
 // Check if we're viewing another profile (read-only mode)
 const isViewingOther = computed(() => followers.isViewingOther)
@@ -164,6 +169,18 @@ async function handleDeclineSuggestion(suggestionId) {
   }
 }
 
+// Reaction handlers
+async function handleReaction(thingId, emojiCode) {
+  if (!profiles.activeProfile) return
+  await reactions.toggleReaction(thingId, profiles.activeProfile.id, emojiCode)
+}
+
+function getMyReactionEmoji(thingId) {
+  if (!profiles.activeProfile) return null
+  const myReaction = reactions.getMyReaction(thingId, profiles.activeProfile.id)
+  return myReaction ? getEmojiByCode(myReaction.emoji) : null
+}
+
 // Initialize on mount
 onMounted(async () => {
   await profiles.fetchProfiles()
@@ -196,6 +213,14 @@ async function loadEntry() {
   }
 
   await entries.loadEntryForDate(targetProfile.value.id, currentDate.value)
+
+  // Fetch reactions for the loaded things
+  const thingIds = entries.things.map(t => t.id)
+  if (thingIds.length > 0) {
+    await reactions.fetchReactionsForThings(thingIds)
+  } else {
+    reactions.clear()
+  }
 
   // Fetch suggestions for this date (only when viewing own profile)
   if (!isViewingOther.value && profiles.activeProfile) {
@@ -381,12 +406,24 @@ onBeforeUnmount(async () => {
             <div
               v-for="(thing, index) in entries.things"
               :key="thing.id"
-              class="flex items-center gap-2"
+              class="flex items-start gap-2"
             >
-              <span class="flex-shrink-0 w-8 h-8 rounded-full bg-primary/10 text-primary flex items-center justify-center text-sm font-medium">
+              <span class="flex-shrink-0 w-8 h-8 rounded-full bg-primary/10 text-primary flex items-center justify-center text-sm font-medium mt-0.5">
                 {{ index + 1 }}
               </span>
-              <p class="flex-1 py-2">{{ thing.content }}</p>
+              <div class="flex-1 min-w-0">
+                <p class="py-1">{{ thing.content }}</p>
+                <div class="flex items-center gap-2">
+                  <ReactionPicker
+                    :current-emoji="getMyReactionEmoji(thing.id)"
+                    @select="handleReaction(thing.id, $event)"
+                  />
+                  <ReactionDisplay
+                    :reactions="reactions.getReactionCounts(thing.id, profiles.activeProfile?.id)"
+                    :reaction-names="reactions.getReactionsByEmoji(thing.id, profiles.activeProfile?.id)"
+                  />
+                </div>
+              </div>
             </div>
 
             <!-- Empty state -->
@@ -438,18 +475,28 @@ onBeforeUnmount(async () => {
             <CardTitle class="text-lg">What are you thankful for today?</CardTitle>
           </CardHeader>
           <CardContent class="space-y-3">
-            <ThingInput
-              v-for="(value, index) in thingValues"
-              :key="index"
-              :model-value="thingValues[index]"
-              @update:model-value="handleThingInput(index, $event)"
-              :index="index"
-              :can-remove="thingValues.length > 3"
-              :placeholder="`Thing #${index + 1}`"
-              @focus="handleThingFocus(index)"
-              @blur="handleThingBlur(index, $event)"
-              @remove="removeThing(index)"
-            />
+            <div v-for="(value, index) in thingValues" :key="index" class="space-y-1">
+              <ThingInput
+                :model-value="thingValues[index]"
+                @update:model-value="handleThingInput(index, $event)"
+                :index="index"
+                :can-remove="thingValues.length > 3"
+                :placeholder="`Thing #${index + 1}`"
+                @focus="handleThingFocus(index)"
+                @blur="handleThingBlur(index, $event)"
+                @remove="removeThing(index)"
+              />
+              <!-- Show reactions from others on your things -->
+              <div
+                v-if="entries.things[index] && Object.keys(reactions.getReactionCounts(entries.things[index].id)).length > 0"
+                class="pl-10"
+              >
+                <ReactionDisplay
+                  :reactions="reactions.getReactionCounts(entries.things[index].id)"
+                  :reaction-names="reactions.getReactionsByEmoji(entries.things[index].id)"
+                />
+              </div>
+            </div>
 
             <!-- Aligned with ThingInput: w-8 number + gap-2 = 40px left, gap-2 + w-8 placeholder = 40px right -->
             <div class="flex">
