@@ -175,6 +175,42 @@ export const useFollowersStore = defineStore('followers', () => {
   }
 
   /**
+   * Follow back a profile that follows you (no share code needed)
+   */
+  async function followBack(activeProfileId, followerProfileId) {
+    if (!activeProfileId || !followerProfileId) return null
+
+    // Check if already following
+    const existing = await pb.collection('profile_followers').getList(1, 1, {
+      filter: `follower = "${activeProfileId}" && following = "${followerProfileId}"`
+    })
+
+    if (existing.items.length > 0) {
+      throw new Error('You are already following this profile')
+    }
+
+    // Get the follower's profile info
+    const targetProfile = await pb.collection('profiles').getOne(followerProfileId)
+
+    // Create follow request
+    const record = await pb.collection('profile_followers').create({
+      follower: activeProfileId,
+      following: followerProfileId,
+      status: 'pending'
+    })
+
+    // Add to local state
+    following.value.push({
+      id: record.id,
+      status: 'pending',
+      profile: targetProfile,
+      created: record.created
+    })
+
+    return targetProfile
+  }
+
+  /**
    * Set the profile we're currently viewing
    */
   function setViewingProfile(profile) {
@@ -215,6 +251,7 @@ export const useFollowersStore = defineStore('followers', () => {
     fetchFollowers,
     fetchPendingRequests,
     followByCode,
+    followBack,
     acceptFollowRequest,
     declineFollowRequest,
     unfollowProfile,

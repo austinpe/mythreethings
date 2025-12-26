@@ -4,16 +4,20 @@ import { onBeforeRouteLeave } from 'vue-router'
 import { useProfilesStore } from '@/stores/profiles'
 import { useEntriesStore } from '@/stores/entries'
 import { useFollowersStore } from '@/stores/followers'
+import { useSuggestionsStore } from '@/stores/suggestions'
 import { Button } from '@/components/ui/button'
 import { Textarea } from '@/components/ui/textarea'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import AppHeader from '@/components/AppHeader.vue'
 import ThingInput from '@/components/ThingInput.vue'
+import SuggestionDialog from '@/components/SuggestionDialog.vue'
+import SuggestionsBanner from '@/components/SuggestionsBanner.vue'
 import { Plus, ChevronLeft, ChevronRight, Lightbulb } from 'lucide-vue-next'
 
 const profiles = useProfilesStore()
 const entries = useEntriesStore()
 const followers = useFollowersStore()
+const suggestions = useSuggestionsStore()
 
 // Check if we're viewing another profile (read-only mode)
 const isViewingOther = computed(() => followers.isViewingOther)
@@ -40,6 +44,10 @@ const initialLoading = ref(true)
 
 const bonusNotes = ref('')
 const thingValues = ref(['', '', ''])
+
+// Suggestion dialog state
+const showSuggestionDialog = ref(false)
+const suggestionLoading = ref(false)
 
 const currentDateStr = computed(() => {
   const year = currentDate.value.getFullYear()
@@ -112,6 +120,50 @@ const isManaged = computed(() => {
   return profiles.activeProfile?.is_managed ?? false
 })
 
+// Suggestion handlers
+async function handleSuggestionSubmit(content) {
+  if (!profiles.activeProfile || !targetProfile.value) return
+
+  suggestionLoading.value = true
+  try {
+    await suggestions.createSuggestion(
+      profiles.activeProfile.id,
+      targetProfile.value.id,
+      currentDateStr.value,
+      content
+    )
+    showSuggestionDialog.value = false
+  } finally {
+    suggestionLoading.value = false
+  }
+}
+
+async function handleAcceptSuggestion(suggestionId) {
+  if (!profiles.activeProfile) return
+
+  suggestionLoading.value = true
+  try {
+    await suggestions.acceptSuggestion(
+      suggestionId,
+      profiles.activeProfile.id,
+      currentDateStr.value
+    )
+    // Reload the entry to show the new thing
+    await loadEntry()
+  } finally {
+    suggestionLoading.value = false
+  }
+}
+
+async function handleDeclineSuggestion(suggestionId) {
+  suggestionLoading.value = true
+  try {
+    await suggestions.declineSuggestion(suggestionId)
+  } finally {
+    suggestionLoading.value = false
+  }
+}
+
 // Initialize on mount
 onMounted(async () => {
   await profiles.fetchProfiles()
@@ -144,6 +196,11 @@ async function loadEntry() {
   }
 
   await entries.loadEntryForDate(targetProfile.value.id, currentDate.value)
+
+  // Fetch suggestions for this date (only when viewing own profile)
+  if (!isViewingOther.value && profiles.activeProfile) {
+    await suggestions.fetchSuggestionsForDate(profiles.activeProfile.id, currentDateStr.value)
+  }
 
   // Populate local values from loaded things
   const newValues = ['', '', '']
@@ -349,17 +406,33 @@ onBeforeUnmount(async () => {
           </CardContent>
         </Card>
 
-        <!-- Suggest something button (placeholder for Phase 9C) -->
+        <!-- Suggest something button -->
         <div class="flex justify-center">
-          <Button variant="outline" disabled>
+          <Button variant="outline" @click="showSuggestionDialog = true">
             <Lightbulb class="h-4 w-4 mr-2" />
             Suggest something
           </Button>
         </div>
+
+        <!-- Suggestion dialog -->
+        <SuggestionDialog
+          v-model:open="showSuggestionDialog"
+          :target-name="targetProfile?.name"
+          :date-str="currentDateStr"
+          @submit="handleSuggestionSubmit"
+        />
       </div>
 
       <!-- Entry form (editing own profile) -->
       <div v-else class="space-y-6">
+        <!-- Suggestions banner -->
+        <SuggestionsBanner
+          :suggestions="suggestions.suggestionsForDate"
+          :loading="suggestionLoading"
+          @accept="handleAcceptSuggestion"
+          @decline="handleDeclineSuggestion"
+        />
+
         <Card>
           <CardHeader>
             <CardTitle class="text-lg">What are you thankful for today?</CardTitle>

@@ -29,6 +29,11 @@ const managedProfileIds = computed(() => {
   return profiles.profiles.map(p => p.id)
 })
 
+// Get set of profile IDs we're following (for quick lookup)
+const followingProfileIds = computed(() => {
+  return new Set(followers.following.map(f => f.profile?.id).filter(Boolean))
+})
+
 function getInitials(name) {
   if (!name) return '?'
   return name
@@ -106,6 +111,18 @@ async function unfollow(followRecordId) {
 function viewProfile(profile) {
   followers.setViewingProfile(profile)
   router.push('/')
+}
+
+async function handleFollowBack(followerProfileId) {
+  error.value = ''
+  loading.value = true
+  try {
+    await followers.followBack(profiles.activeProfile.id, followerProfileId)
+  } catch (e) {
+    error.value = e.message
+  } finally {
+    loading.value = false
+  }
 }
 
 onMounted(async () => {
@@ -283,11 +300,24 @@ onMounted(async () => {
 
         <Card v-for="follower in followers.followers" :key="follower.id">
           <CardContent class="py-4">
-            <div class="flex items-center gap-3">
-              <Avatar>
-                <AvatarFallback>{{ getInitials(follower.profile?.name) }}</AvatarFallback>
-              </Avatar>
-              <p class="font-medium">{{ follower.profile?.name }}</p>
+            <div class="flex items-center justify-between">
+              <div class="flex items-center gap-3">
+                <Avatar>
+                  <AvatarFallback>{{ getInitials(follower.profile?.name) }}</AvatarFallback>
+                </Avatar>
+                <p class="font-medium">{{ follower.profile?.name }}</p>
+              </div>
+              <Button
+                v-if="!followingProfileIds.has(follower.profile?.id)"
+                variant="outline"
+                size="sm"
+                @click="handleFollowBack(follower.profile?.id)"
+                :disabled="loading"
+              >
+                <UserPlus class="h-4 w-4 mr-1" />
+                Follow Back
+              </Button>
+              <span v-else class="text-sm text-muted-foreground">Following</span>
             </div>
           </CardContent>
         </Card>
