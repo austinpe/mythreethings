@@ -11,6 +11,7 @@ import { Textarea } from '@/components/ui/textarea'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import AppHeader from '@/components/AppHeader.vue'
 import ThingInput from '@/components/ThingInput.vue'
+import ThingMediaDisplay from '@/components/ThingMediaDisplay.vue'
 import SuggestionDialog from '@/components/SuggestionDialog.vue'
 import SuggestionsBanner from '@/components/SuggestionsBanner.vue'
 import ReactionPicker from '@/components/ReactionPicker.vue'
@@ -49,6 +50,8 @@ const initialLoading = ref(true)
 
 const bonusNotes = ref('')
 const thingValues = ref(['', '', ''])
+// Track pending media for each thing slot: { file: File|Blob, mediaType: string } | null
+const pendingMediaList = ref([null, null, null])
 
 // Suggestion dialog state
 const showSuggestionDialog = ref(false)
@@ -243,6 +246,8 @@ async function loadEntry() {
   }
 
   thingValues.value = newValues
+  // Reset pending media list to match thing count
+  pendingMediaList.value = newValues.map(() => null)
   bonusNotes.value = entries.currentEntry?.bonus_notes || ''
 }
 
@@ -289,17 +294,59 @@ async function handleThingBlur(index, value) {
     thingDebounceTimer = null
   }
   pendingThingIndex.value = null
-  await entries.saveThing(index, value)
+
+  // Check for pending media
+  const pendingMedia = pendingMediaList.value[index]
+
+  if (pendingMedia) {
+    await entries.saveThing(index, '', pendingMedia.file, pendingMedia.mediaType)
+    pendingMediaList.value[index] = null
+  } else {
+    await entries.saveThing(index, value)
+  }
 }
 
 async function addThing() {
   thingValues.value.push('')
+  pendingMediaList.value.push(null)
   await entries.addThing()
 }
 
 async function removeThing(index) {
   thingValues.value.splice(index, 1)
+  pendingMediaList.value.splice(index, 1)
   await entries.removeThing(index)
+}
+
+async function handleMediaSelect(index, { file, mediaType }) {
+  // Clear text value since it's now media
+  thingValues.value[index] = ''
+
+  // Save media immediately
+  await entries.saveThing(index, '', file, mediaType)
+
+  // Reload to get the saved thing with media URL
+  await entries.fetchThings()
+}
+
+async function handleMediaRemove(index) {
+  // Clear pending media
+  pendingMediaList.value[index] = null
+
+  // If there was saved media, delete the thing from PocketBase
+  if (entries.things[index]?.media) {
+    await entries.removeThing(index)
+
+    // Sync local thingValues with entries.things
+    thingValues.value.splice(index, 1)
+    pendingMediaList.value.splice(index, 1)
+
+    // Ensure at least 3 slots
+    while (thingValues.value.length < 3) {
+      thingValues.value.push('')
+      pendingMediaList.value.push(null)
+    }
+  }
 }
 
 function handleBonusNotesFocus() {
@@ -338,7 +385,14 @@ async function saveAllPending() {
 
   // Save any pending thing
   if (pendingThingIndex.value !== null) {
-    await entries.saveThing(pendingThingIndex.value, thingValues.value[pendingThingIndex.value])
+    const index = pendingThingIndex.value
+    const pendingMedia = pendingMediaList.value[index]
+    if (pendingMedia) {
+      await entries.saveThing(index, '', pendingMedia.file, pendingMedia.mediaType)
+      pendingMediaList.value[index] = null
+    } else {
+      await entries.saveThing(index, thingValues.value[index])
+    }
     pendingThingIndex.value = null
   }
   // Save pending bonus notes
@@ -412,7 +466,14 @@ onBeforeUnmount(async () => {
                 {{ index + 1 }}
               </span>
               <div class="flex-1 min-w-0">
-                <p class="py-1">{{ thing.content }}</p>
+                <!-- Text content -->
+                <p v-if="thing.content" class="py-1">{{ thing.content }}</p>
+                <!-- Media content -->
+                <ThingMediaDisplay
+                  v-else-if="thing.media"
+                  :record="thing"
+                  class="my-1"
+                />
                 <div class="flex items-center gap-2">
                   <ReactionPicker
                     :current-emoji="getMyReactionEmoji(thing.id)"
@@ -482,9 +543,12 @@ onBeforeUnmount(async () => {
                 :index="index"
                 :can-remove="thingValues.length > 3"
                 :placeholder="`Thing #${index + 1}`"
+                :thing="entries.things[index]"
                 @focus="handleThingFocus(index)"
                 @blur="handleThingBlur(index, $event)"
                 @remove="removeThing(index)"
+                @media-select="handleMediaSelect(index, $event)"
+                @media-remove="handleMediaRemove(index)"
               />
               <!-- Show reactions from others on your things -->
               <div

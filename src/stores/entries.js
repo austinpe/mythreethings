@@ -83,39 +83,71 @@ export const useEntriesStore = defineStore('entries', () => {
     things.value = thingRecords
   }
 
-  async function saveThing(index, content) {
-    // Only save if there's content to save
-    if (!content.trim() && !things.value[index]) return
+  async function saveThing(index, content, mediaFile = null, mediaType = null) {
+    const hasContent = content && content.trim()
+    const hasMedia = mediaFile !== null
+
+    // Validate: can't have both content and media
+    if (hasContent && hasMedia) {
+      throw new Error('A thing cannot have both text and media')
+    }
+
+    // Only save if there's something to save
+    if (!hasContent && !hasMedia && !things.value[index]) return
 
     saving.value = true
     try {
       const existingThing = things.value[index]
 
       if (existingThing) {
-        // Update existing
-        if (content.trim()) {
+        // Update existing thing
+        if (hasContent) {
+          // Update with text content (clear any existing media)
           const updated = await pb.collection('things').update(existingThing.id, {
-            content: content.trim()
+            content: content.trim(),
+            media: null,
+            media_type: ''
           })
           things.value[index] = updated
+        } else if (hasMedia) {
+          // Update with media (clear any existing content)
+          const formData = new FormData()
+          formData.append('content', '')
+          formData.append('media', mediaFile)
+          formData.append('media_type', mediaType)
+
+          const updated = await pb.collection('things').update(existingThing.id, formData)
+          things.value[index] = updated
         } else {
-          // Delete if content is empty
+          // Delete if both are empty
           await pb.collection('things').delete(existingThing.id)
           things.value.splice(index, 1)
-          // Reorder remaining things
           await reorderThings()
         }
-      } else if (content.trim()) {
-        // Create entry first if needed
+      } else if (hasContent || hasMedia) {
+        // Create new thing
         await ensureEntry()
         if (!currentEntry.value) return
 
-        // Create new thing
-        const newThing = await pb.collection('things').create({
-          entry: currentEntry.value.id,
-          content: content.trim(),
-          order: index + 1
-        })
+        let newThing
+        if (hasContent) {
+          // Create text thing
+          newThing = await pb.collection('things').create({
+            entry: currentEntry.value.id,
+            content: content.trim(),
+            order: index + 1
+          })
+        } else {
+          // Create media thing
+          const formData = new FormData()
+          formData.append('entry', currentEntry.value.id)
+          formData.append('content', '')
+          formData.append('order', index + 1)
+          formData.append('media', mediaFile)
+          formData.append('media_type', mediaType)
+
+          newThing = await pb.collection('things').create(formData)
+        }
         things.value.push(newThing)
       }
     } finally {

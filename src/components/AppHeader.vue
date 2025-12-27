@@ -33,6 +33,7 @@ function handleDateSelect(dateStr) {
 }
 
 function goHome() {
+  followers.clearViewingProfile()
   router.push('/')
 }
 
@@ -57,14 +58,23 @@ function exitViewingMode() {
             <span>{{ followers.viewingProfile?.name }}'s Things</span>
           </button>
 
-          <!-- Right: Calendar only -->
-          <button
-            v-if="showCalendar"
-            @click="calendarOpen = true"
-            class="p-2 rounded-lg hover:bg-muted transition-colors"
-          >
-            <Calendar class="h-5 w-5 text-muted-foreground" />
-          </button>
+          <!-- Right: Home + Calendar -->
+          <div class="flex items-center gap-1">
+            <button
+              @click="goHome"
+              class="p-2 rounded-lg hover:bg-muted transition-colors"
+              title="Go to my things"
+            >
+              <Home class="h-5 w-5 text-muted-foreground" />
+            </button>
+            <button
+              v-if="showCalendar"
+              @click="calendarOpen = true"
+              class="p-2 rounded-lg hover:bg-muted transition-colors"
+            >
+              <Calendar class="h-5 w-5 text-muted-foreground" />
+            </button>
+          </div>
         </template>
 
         <!-- Normal mode -->
