@@ -142,57 +142,6 @@ onMounted(async () => {
 
     <!-- Main content -->
     <main class="container mx-auto px-4 py-6 max-w-lg space-y-6">
-      <!-- Your share code -->
-      <Card>
-        <CardHeader>
-          <CardTitle class="text-lg">Your Share Code</CardTitle>
-          <CardDescription>
-            Share this code with others so they can follow
-            <strong>{{ profiles.activeProfile?.name }}</strong>
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <div v-if="activeShareCode" class="flex items-center gap-2">
-            <code class="flex-1 bg-muted px-3 py-2 rounded text-center font-mono text-lg">
-              {{ activeShareCode }}
-            </code>
-            <Button variant="outline" size="icon" @click="copyShareCode">
-              <Check v-if="copied" class="h-4 w-4 text-green-500" />
-              <Copy v-else class="h-4 w-4" />
-            </Button>
-          </div>
-          <p v-else class="text-sm text-muted-foreground text-center py-2">
-            No share code set for this profile
-          </p>
-        </CardContent>
-      </Card>
-
-      <!-- Follow someone -->
-      <Card>
-        <CardHeader>
-          <CardTitle class="text-lg">Follow Someone</CardTitle>
-          <CardDescription>Enter their share code to follow their profile</CardDescription>
-        </CardHeader>
-        <CardContent class="space-y-4">
-          <div class="flex gap-2">
-            <Input
-              :model-value="shareCode"
-              @update:model-value="(val) => shareCode = val"
-              placeholder="Enter share code"
-              class="flex-1 font-mono"
-              @keyup.enter="followProfile"
-            />
-            <Button @click="followProfile" :disabled="loading || !shareCode.trim()">
-              <UserPlus class="h-4 w-4 mr-2" />
-              Follow
-            </Button>
-          </div>
-          <p v-if="error" class="text-sm text-destructive">{{ error }}</p>
-        </CardContent>
-      </Card>
-
-      <Separator />
-
       <!-- Pending requests to my profiles -->
       <div v-if="followers.pendingRequests.length > 0" class="space-y-4">
         <h2 class="font-semibold flex items-center gap-2">
@@ -288,7 +237,7 @@ onMounted(async () => {
           v-if="!followers.acceptedFollowing.length && !followers.pendingFollowing.length"
           class="text-sm text-muted-foreground text-center py-4"
         >
-          You're not following anyone yet. Enter a share code above to get started.
+          You're not following anyone yet. Enter a share code below to get started.
         </p>
       </div>
 
@@ -327,9 +276,60 @@ onMounted(async () => {
           v-if="!followers.followers.length"
           class="text-sm text-muted-foreground text-center py-4"
         >
-          No one is following you yet. Share your code above to let others follow you.
+          No one is following you yet. Share your code below to let others follow you.
         </p>
       </div>
+
+      <Separator />
+
+      <!-- Your share code -->
+      <Card>
+        <CardHeader>
+          <CardTitle class="text-lg">Your Share Code</CardTitle>
+          <CardDescription>
+            Share this code with others so they can follow
+            <strong>{{ profiles.activeProfile?.name }}</strong>
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div v-if="activeShareCode" class="flex items-center gap-2">
+            <code class="flex-1 bg-muted px-3 py-2 rounded text-center font-mono text-lg">
+              {{ activeShareCode }}
+            </code>
+            <Button variant="outline" size="icon" @click="copyShareCode">
+              <Check v-if="copied" class="h-4 w-4 text-green-500" />
+              <Copy v-else class="h-4 w-4" />
+            </Button>
+          </div>
+          <p v-else class="text-sm text-muted-foreground text-center py-2">
+            No share code set for this profile
+          </p>
+        </CardContent>
+      </Card>
+
+      <!-- Follow someone -->
+      <Card>
+        <CardHeader>
+          <CardTitle class="text-lg">Follow Someone</CardTitle>
+          <CardDescription>Enter their share code to follow their profile</CardDescription>
+        </CardHeader>
+        <CardContent class="space-y-4">
+          <div class="flex gap-2">
+            <Input
+              :model-value="shareCode"
+              @update:model-value="(val) => shareCode = val"
+              placeholder="Enter share code"
+              class="flex-1 font-mono"
+              @keyup.enter="followProfile"
+            />
+            <Button @click="followProfile" :disabled="loading || !shareCode.trim()">
+              <UserPlus class="h-4 w-4 mr-2" />
+              Follow
+            </Button>
+          </div>
+          <p v-if="error" class="text-sm text-destructive">{{ error }}</p>
+        </CardContent>
+      </Card>
     </main>
   </div>
 </template>
