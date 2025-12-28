@@ -19,13 +19,13 @@ export const MEDIA_LIMITS = {
   }
 }
 
-// Compression settings
+// Compression settings (light compression to keep images sharp)
 const COMPRESSION = {
-  maxWidth: 1920,
-  maxHeight: 1920,
-  initialQuality: 0.8,
-  retryQuality: 0.6,
-  targetSize: 1 * 1024 * 1024 // 1MB target, retry compression if larger
+  maxWidth: 2560,
+  maxHeight: 2560,
+  initialQuality: 0.9,
+  retryQuality: 0.8,
+  targetSize: 2 * 1024 * 1024 // 2MB target, retry compression if larger
 }
 
 /**

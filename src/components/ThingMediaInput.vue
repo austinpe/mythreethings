@@ -18,7 +18,8 @@ const props = defineProps({
 
 const emit = defineEmits(['select', 'error'])
 
-const fileInput = ref(null)
+const cameraInput = ref(null)
+const galleryInput = ref(null)
 const error = ref(null)
 
 // Audio recording
@@ -28,9 +29,15 @@ const isRecording = computed(() => recorder.isRecording.value)
 const recordingDuration = computed(() => recorder.duration.value)
 
 // Handle file selection (image or video)
-function openFilePicker() {
-  if (fileInput.value) {
-    fileInput.value.click()
+function openCamera() {
+  if (cameraInput.value) {
+    cameraInput.value.click()
+  }
+}
+
+function openGallery() {
+  if (galleryInput.value) {
+    galleryInput.value.click()
   }
 }
 
@@ -95,7 +102,7 @@ const acceptTypes = computed(() => {
       <Button
         variant="outline"
         size="sm"
-        @click="openFilePicker"
+        @click="openCamera"
         :disabled="disabled"
         class="flex-1"
       >
@@ -105,18 +112,27 @@ const acceptTypes = computed(() => {
       <Button
         variant="outline"
         size="sm"
-        @click="openFilePicker"
+        @click="openGallery"
         :disabled="disabled"
         class="flex-1"
       >
         <ImageIcon class="h-4 w-4 mr-2" />
         Gallery
       </Button>
+      <!-- Camera input - uses capture to open camera directly -->
       <input
-        ref="fileInput"
+        ref="cameraInput"
         type="file"
         :accept="acceptTypes"
         capture="environment"
+        class="hidden"
+        @change="handleFileSelect"
+      />
+      <!-- Gallery input - no capture, opens file picker -->
+      <input
+        ref="galleryInput"
+        type="file"
+        :accept="acceptTypes"
         class="hidden"
         @change="handleFileSelect"
       />
